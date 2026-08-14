@@ -1,0 +1,292 @@
+.quantum-footer {
+  width: 100%;
+
+  border-top: 1px solid #181818;
+
+  background:
+    radial-gradient(
+      circle at 15% 100%,
+      rgba(212, 175, 55, 0.035),
+      transparent 25%
+    ),
+    #090909;
+}
+
+.quantum-footer-inner {
+  width: min(1440px, calc(100% - 64px));
+
+  margin: 0 auto;
+}
+
+.footer-main {
+  min-height: 250px;
+
+  display: grid;
+
+  grid-template-columns: 2fr 1fr 1fr;
+
+  gap: 70px;
+
+  padding: 58px 0 48px;
+}
+
+.footer-brand {
+  max-width: 390px;
+}
+
+.footer-logo {
+  display: inline-flex;
+  align-items: center;
+
+  gap: 9px;
+
+  padding: 0;
+
+  border: none;
+
+  background: transparent;
+
+  color: #f2f2f2;
+
+  font-family: "Outfit", sans-serif;
+
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.footer-logo .gold-symbol {
+  font-size: 29px;
+  line-height: 1;
+  transform-origin: center;
+  animation:
+    goldShine 4s ease infinite,
+    hexagonFloat 3s ease-in-out infinite;
+}
+
+.footer-brand p {
+  max-width: 360px;
+
+  margin-top: 18px;
+
+  color: #575757;
+
+  font-size: 12px;
+  font-weight: 300;
+
+  line-height: 1.7;
+}
+
+.footer-nav > span,
+.footer-connect > span {
+  display: block;
+
+  margin-bottom: 17px;
+
+  color: #696969;
+
+  font-size: 9px;
+  font-weight: 500;
+
+  letter-spacing: 1.3px;
+
+  text-transform: uppercase;
+}
+
+.footer-nav > div,
+.footer-connect > div {
+  display: flex;
+  flex-direction: column;
+
+  gap: 11px;
+}
+
+.footer-nav button {
+  width: fit-content;
+
+  padding: 0;
+
+  border: none;
+
+  background: transparent;
+
+  color: #777;
+
+  font-family: "Outfit", sans-serif;
+  font-size: 11px;
+
+  transition:
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.footer-nav button:hover {
+  color: #e2c34f;
+
+  transform: translateX(3px);
+}
+
+.footer-connect a {
+  width: fit-content;
+
+  display: inline-flex;
+  align-items: center;
+
+  gap: 7px;
+
+  color: #737373;
+
+  font-size: 11px;
+
+  transition: color 0.2s ease;
+}
+
+.footer-connect a:hover {
+  color: #d4af37;
+}
+
+.footer-connect a svg:last-child {
+  font-size: 10px;
+}
+
+.footer-bottom {
+  min-height: 68px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 20px;
+
+  border-top: 1px solid #171717;
+}
+
+.footer-bottom p {
+  color: #474747;
+
+  font-size: 9px;
+}
+
+.footer-status {
+  display: flex;
+  align-items: center;
+
+  gap: 7px;
+
+  color: #555;
+
+  font-size: 9px;
+}
+
+.footer-status > span {
+  width: 5px;
+  height: 5px;
+
+  border-radius: 50%;
+
+  background: #19c784;
+
+  box-shadow: 0 0 7px rgba(25, 199, 132, 0.5);
+}
+
+/* ========================================= */
+/* FINAL GLOBAL POLISH */
+/* ========================================= */
+
+button,
+a,
+input {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+  outline: 1px solid rgba(212, 175, 55, 0.65);
+  outline-offset: 3px;
+}
+
+img,
+svg {
+  max-width: 100%;
+}
+
+.dashboard-app {
+  overflow-x: hidden;
+}
+
+/* ========================================= */
+/* FINAL MOBILE POLISH */
+/* ========================================= */
+
+@media (max-width: 900px) {
+  .quantum-footer-inner {
+    width: min(100% - 40px, 1440px);
+  }
+
+  .footer-main {
+    grid-template-columns: 1.5fr 1fr 1fr;
+
+    gap: 40px;
+  }
+}
+
+@media (max-width: 700px) {
+  .footer-main {
+    grid-template-columns: 1fr 1fr;
+
+    gap: 40px 30px;
+  }
+
+  .footer-brand {
+    grid-column: span 2;
+  }
+
+  .footer-bottom {
+    align-items: flex-start;
+    flex-direction: column;
+
+    justify-content: center;
+
+    padding: 18px 0;
+  }
+}
+
+@media (max-width: 520px) {
+  .quantum-footer-inner {
+    width: calc(100% - 30px);
+  }
+
+  .footer-main {
+    grid-template-columns: 1fr;
+
+    gap: 35px;
+
+    padding: 45px 0 38px;
+  }
+
+  .footer-brand {
+    grid-column: auto;
+  }
+
+  .footer-brand p {
+    max-width: 300px;
+  }
+
+  .footer-bottom {
+    min-height: 90px;
+  }
+
+  .navbar-logo {
+    font-size: 19px;
+  }
+
+  .navbar-logo .gold-symbol {
+    font-size: 18px;
+  }
+
+  .dashboard-eyebrow {
+    font-size: 9px;
+
+    letter-spacing: 1.1px;
+  }
+}

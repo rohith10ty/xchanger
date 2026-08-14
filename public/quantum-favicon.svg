@@ -1,0 +1,82 @@
+<svg
+  width="64"
+  height="64"
+  viewBox="0 0 64 64"
+  fill="none"
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <defs>
+    <linearGradient
+      id="goldGradient"
+      x1="10"
+      y1="8"
+      x2="54"
+      y2="56"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop offset="0%" stop-color="#fff4a3"/>
+      <stop offset="20%" stop-color="#f6dc7d"/>
+      <stop offset="48%" stop-color="#d4af37"/>
+      <stop offset="72%" stop-color="#9a7619"/>
+      <stop offset="100%" stop-color="#ffe678"/>
+    </linearGradient>
+
+    <filter
+      id="goldGlow"
+      x="-100%"
+      y="-100%"
+      width="300%"
+      height="300%"
+    >
+      <feGaussianBlur
+        stdDeviation="4"
+        result="blur"
+      />
+
+      <feFlood
+        flood-color="#d4af37"
+        flood-opacity="0.85"
+      />
+
+      <feComposite
+        in2="blur"
+        operator="in"
+      />
+
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <path
+    d="
+      M32 5
+      L55 18.5
+      L55 45.5
+      L32 59
+      L9 45.5
+      L9 18.5
+      Z
+    "
+    fill="url(#goldGradient)"
+    filter="url(#goldGlow)"
+  />
+
+  <path
+    d="
+      M32 11
+      L49 21
+      L49 41
+      L32 51
+      L15 41
+      L15 21
+      Z
+    "
+    fill="none"
+    stroke="#fff2a0"
+    stroke-opacity="0.28"
+    stroke-width="1"
+  />
+</svg>
