@@ -1,33 +1,33 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import Lenis from "lenis";
 import "./App.css";
 
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
-import Home from "./components/Home";
-import Markets from "./components/Markets";
-import Trade from "./components/Trade";
-import Portfolio from "./components/Portfolio";
-import Transactions from "./components/Transactions";
-import Profile from "./components/Profile";
 import ExchangeProvider from "./components/ExchangeProvider";
+import { useExchange } from "./components/exchangeStore";
 
-function App() {
+const Home = lazy(() => import("./components/Home"));
+const Markets = lazy(() => import("./components/Markets"));
+const StockDetails = lazy(() => import("./components/StockDetails"));
+const Trade = lazy(() => import("./components/Trade"));
+const Portfolio = lazy(() => import("./components/Portfolio"));
+const Transactions = lazy(() => import("./components/Transactions"));
+const Auth = lazy(() => import("./components/Auth"));
+const Profile = lazy(() => import("./components/Profile"));
+
+function AppShell() {
+  const { setSelectedSymbol } = useExchange();
+
   const getPageFromHash = () => {
     const hash = window.location.hash.replace("#/", "");
-
-    if (!hash) {
-      return "home";
-    }
-
-    return hash;
+    return hash || "home";
   };
 
   const [currentPage, setCurrentPage] = useState(getPageFromHash);
-  const [marketSearch, setMarketSearch] = useState("");
   const [user, setUser] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem("quantumUser")) || null;
+      return JSON.parse(localStorage.getItem("xchangerUser")) || null;
     } catch {
       return null;
     }
@@ -35,19 +35,17 @@ function App() {
 
   useEffect(() => {
     const lenis = new Lenis({
-      duration: 1.1,
+      duration: 1.0,
       smoothWheel: true,
       wheelMultiplier: 0.9,
       touchMultiplier: 1.2,
     });
 
     let animationFrame;
-
     function raf(time) {
       lenis.raf(time);
       animationFrame = requestAnimationFrame(raf);
     }
-
     animationFrame = requestAnimationFrame(raf);
 
     return () => {
@@ -59,34 +57,45 @@ function App() {
   useEffect(() => {
     const handleHashChange = () => {
       setCurrentPage(getPageFromHash());
-
-      window.scrollTo({
-        top: 0,
-        left: 0,
-      });
+      window.scrollTo({ top: 0, left: 0 });
     };
-
     window.addEventListener("hashchange", handleHashChange);
-
-    return () => {
-      window.removeEventListener("hashchange", handleHashChange);
-    };
+    return () => window.removeEventListener("hashchange", handleHashChange);
   }, []);
 
   const handleNavigate = (page) => {
     window.location.hash = `/${page}`;
-
     setCurrentPage(page);
-
-    window.scrollTo({
-      top: 0,
-      left: 0,
-      behavior: "smooth",
-    });
+    window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
   };
 
-  const handleCryptoSearch = (query) => {
-    setMarketSearch(query);
+  const handleSelectStock = (symbol) => {
+    setSelectedSymbol(symbol);
+    handleNavigate("stock");
+  };
+
+  const handleTradeStock = (symbol) => {
+    setSelectedSymbol(symbol);
+    handleNavigate("trade");
+  };
+
+  const handleAuthSuccess = (userData) => {
+    setUser(userData);
+    try {
+      localStorage.setItem("xchangerUser", JSON.stringify(userData));
+    } catch {
+      // ignore storage errors
+    }
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    try {
+      localStorage.removeItem("xchangerUser");
+    } catch {
+      // ignore
+    }
+    handleNavigate("home");
   };
 
   const renderPage = () => {
@@ -94,44 +103,96 @@ function App() {
       case "markets":
         return (
           <Markets
-            externalSearch={marketSearch}
-            setExternalSearch={setMarketSearch}
+            onNavigate={handleNavigate}
+            onSelectStock={handleSelectStock}
+            onTradeStock={handleTradeStock}
+          />
+        );
+      case "stock":
+        return (
+          <StockDetails
+            onNavigate={handleNavigate}
+            onTradeStock={handleTradeStock}
+          />
+        );
+      case "trade":
+        return <Trade onSelectStock={handleSelectStock} />;
+      case "portfolio":
+        return (
+          <Portfolio
+            onSelectStock={handleSelectStock}
+            onTradeStock={handleTradeStock}
+          />
+        );
+      case "transactions":
+        return <Transactions />;
+      case "login":
+        return (
+          <Auth
+            mode="login"
+            onNavigate={handleNavigate}
+            onAuthSuccess={handleAuthSuccess}
+          />
+        );
+      case "signup":
+        return (
+          <Auth
+            mode="signup"
+            onNavigate={handleNavigate}
+            onAuthSuccess={handleAuthSuccess}
+          />
+        );
+      case "profile":
+        return (
+          <Profile
+            user={user}
+            onLogout={handleLogout}
             onNavigate={handleNavigate}
           />
         );
-
-      case "trade":
-        return <Trade />;
-
-      case "portfolio":
-        return <Portfolio />;
-
-      case "transactions":
-        return <Transactions />;
-
-      case "profile":
-        return <Profile user={user} onUserChange={setUser} />;
-
       case "home":
       default:
-        return <Home onNavigate={handleNavigate} />;
+        return (
+          <Home
+            onNavigate={handleNavigate}
+            onSelectStock={handleSelectStock}
+            user={user}
+          />
+        );
     }
   };
 
   return (
+    <div className="xchanger-shell antialiased">
+      <Navbar
+        currentPage={currentPage}
+        onNavigate={handleNavigate}
+        onSelectStock={handleSelectStock}
+        user={user}
+        onLogout={handleLogout}
+      />
+
+      <main className="xchanger-main">
+        <Suspense
+          fallback={
+            <div className="flex min-h-[50vh] items-center justify-center text-xs tracking-wider text-zinc-500">
+              LOADING XCHANGER TERMINAL...
+            </div>
+          }
+        >
+          {renderPage()}
+        </Suspense>
+      </main>
+
+      <Footer onNavigate={handleNavigate} />
+    </div>
+  );
+}
+
+function App() {
+  return (
     <ExchangeProvider>
-      <div className="app dashboard-app">
-        <Navbar
-          currentPage={currentPage}
-          onNavigate={handleNavigate}
-          onCryptoSearch={handleCryptoSearch}
-          user={user}
-        />
-
-        {renderPage()}
-
-        <Footer onNavigate={handleNavigate} />
-      </div>
+      <AppShell />
     </ExchangeProvider>
   );
 }

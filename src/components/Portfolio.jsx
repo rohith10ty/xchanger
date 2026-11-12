@@ -1,434 +1,303 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
-  FiArrowDownRight,
-  FiArrowUpRight,
-  FiEye,
-  FiEyeOff,
-  FiPlus,
-} from "react-icons/fi";
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
+  Bar,
+  BarChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import { formatNumber, useExchange } from "./exchangeStore";
-import "./Portfolio.css";
+import { FiRefreshCw } from "react-icons/fi";
+import {
+  formatCompactINR,
+  formatINR,
+  useExchange,
+} from "./exchangeStore";
 
-function Portfolio() {
-  const {
-    holdings,
-    wallet,
-    totalBalance,
-    totalPnl,
-    unrealizedPnl,
-    realizedPnl,
-    addFunds,
-    currency,
-    formatMoney,
-  } = useExchange();
-  const [hideBalance, setHideBalance] = useState(false);
-  const [showAll, setShowAll] = useState(false);
+function Portfolio({ onSelectStock, onTradeStock }) {
+  const { portfolioSummary, wallet, resetWallet } = useExchange();
 
-  const visibleHoldings = showAll ? holdings : holdings.slice(0, 4);
-  const costBasis = holdings.reduce(
-    (sum, asset) => sum + asset.amount * asset.averageCost,
-    0,
-  );
-  const totalPnlPercent = costBasis ? (totalPnl / costBasis) * 100 : 0;
-  const todayPnl = holdings.reduce((sum, asset) => {
-    const previousPrice = asset.change
-      ? asset.price / (1 + asset.change / 100)
-      : asset.price;
-    return sum + (asset.price - previousPrice) * asset.amount;
-  }, 0);
-  const todayPositive = todayPnl >= 0;
-  const pnlPositive = totalPnl >= 0;
-  const bestPerformer = holdings.reduce(
-    (best, asset) =>
-      !best || asset.profitLossPercent > best.profitLossPercent ? asset : best,
-    null,
-  );
-
-  const balanceTrend = useMemo(() => {
-    const movement = todayPnl || totalBalance * 0.008;
-    const variation = [0.002, -0.001, 0.0015, -0.0005, 0.001, -0.0015, 0];
-    return Array.from({ length: 7 }, (_, index) => {
-      const date = new Date();
-      date.setDate(date.getDate() - (6 - index));
-      return {
-        label: date.toLocaleDateString(undefined, {
-          month: "short",
-          day: "numeric",
-        }),
-        value:
-          totalBalance -
-          movement * ((6 - index) / 6) +
-          totalBalance * variation[index],
-      };
+  const sectorData = useMemo(() => {
+    const map = {};
+    portfolioSummary.detailedHoldings.forEach((h) => {
+      map[h.sector] = (map[h.sector] || 0) + h.currentValue;
     });
-  }, [todayPnl, totalBalance]);
-
-  const growthTrend = useMemo(() => {
-    const startValue = Math.max(totalBalance - totalPnl, totalBalance * 0.2);
-    const variation = [
-      0, 0.015, -0.008, 0.011, -0.004, 0.009, -0.012, 0.006, -0.004, 0.008,
-      -0.003, 0,
-    ];
-    return Array.from({ length: 12 }, (_, index) => {
-      const date = new Date();
-      date.setMonth(date.getMonth() - (11 - index));
-      const progress = index / 11;
-      return {
-        label: date.toLocaleDateString(undefined, { month: "short" }),
-        value:
-          startValue +
-          (totalBalance - startValue) * progress +
-          totalBalance * variation[index],
-      };
-    });
-  }, [totalBalance, totalPnl]);
-
-  const hidden = "********";
+    return Object.entries(map).map(([sector, value]) => ({
+      sector,
+      value: Math.round(value),
+    }));
+  }, [portfolioSummary.detailedHoldings]);
 
   return (
-    <main className="portfolio-page">
-      <section className="portfolio-header">
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <div className="dashboard-eyebrow">
-            <span></span>YOUR ASSETS
-          </div>
-          <h1>Portfolio</h1>
-          <p>
-            Monitor your live holdings, paper balance and overall portfolio
-            performance across Quantum.
-          </p>
+          <span className="text-[11px] font-semibold uppercase tracking-widest text-zinc-500">
+            Paper Demat &amp; Holdings
+          </span>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+            Portfolio &amp; Allocation
+          </h1>
         </div>
         <button
-          className="primary-action portfolio-deposit-button"
-          onClick={addFunds}
+          type="button"
+          onClick={resetWallet}
+          className="inline-flex items-center gap-2 rounded-xl border border-zinc-800 bg-[#0b0b0b] px-4 py-2 text-xs font-medium text-zinc-300 transition-colors hover:border-white hover:text-white"
         >
-          <FiPlus />
-          Add {formatMoney(1000)} Paper Cash
+          <FiRefreshCw className="h-3.5 w-3.5" />
+          Reset Paper Account
         </button>
-      </section>
+      </div>
 
-      <section className="portfolio-summary-grid">
-        <article className="portfolio-main-balance">
-          <div className="portfolio-balance-top">
-            <span>Total Portfolio Balance</span>
-            <button
-              className="balance-visibility-button"
-              onClick={() => setHideBalance((value) => !value)}
-              aria-label="Toggle balance visibility"
-            >
-              {hideBalance ? <FiEyeOff /> : <FiEye />}
-            </button>
+      {/* Summary Cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-2xl border border-zinc-800 bg-[#0b0b0b] p-5">
+          <div className="text-[11px] uppercase tracking-wider text-zinc-500">
+            Total Account Value
           </div>
-          <h2>{hideBalance ? hidden : formatMoney(totalBalance)}</h2>
-          <div className="portfolio-main-meta">
-            <div>
-              <span>Today</span>
-              <strong className={todayPositive ? "positive" : "negative"}>
-                {todayPositive ? <FiArrowUpRight /> : <FiArrowDownRight />}
-                {todayPositive ? "+" : ""}
-                {formatMoney(todayPnl)}
-              </strong>
-            </div>
-            <div>
-              <span>All-time Return</span>
-              <strong className={pnlPositive ? "positive" : "negative"}>
-                {pnlPositive ? "+" : ""}
-                {totalPnlPercent.toFixed(2)}%
-              </strong>
-            </div>
+          <div className="font-mono-num mt-2 text-2xl font-bold text-white">
+            {formatINR(portfolioSummary.totalAccountValue)}
           </div>
-          <div className="portfolio-balance-chart">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart
-                data={balanceTrend}
-                margin={{ top: 8, right: 5, left: -16, bottom: 0 }}
-              >
-                <defs>
-                  <linearGradient id="balanceArea" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#d4af37" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="#d4af37" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid
-                  stroke="#202020"
-                  strokeDasharray="3 3"
-                  vertical={false}
-                />
-                <XAxis
-                  dataKey="label"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "#666", fontSize: 9 }}
-                />
-                <YAxis
-                  domain={["auto", "auto"]}
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "#555", fontSize: 8 }}
-                  tickFormatter={(value) => formatMoney(value)}
-                />
-                <Tooltip
-                  content={<PortfolioChartTooltip formatMoney={formatMoney} />}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="value"
-                  stroke="#d4af37"
-                  strokeWidth={2}
-                  fill="url(#balanceArea)"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+          <div className="mt-1 text-[11px] text-zinc-500">
+            Cash + Equity Holdings
           </div>
-        </article>
-
-        <article className="portfolio-stat-card">
-          <span>Available Balance</span>
-          <strong>{hideBalance ? hidden : formatMoney(wallet.cash)}</strong>
-          <small>Ready for paper trades in {currency}</small>
-        </article>
-        <article className="portfolio-stat-card">
-          <span>Total Profit / Loss</span>
-          <strong className={pnlPositive ? "positive" : "negative"}>
-            {hideBalance
-              ? hidden
-              : `${pnlPositive ? "+" : ""}${formatMoney(totalPnl)}`}
-          </strong>
-          <small className={pnlPositive ? "positive" : "negative"}>
-            {totalPnlPercent.toFixed(2)}% all time
-          </small>
-        </article>
-      </section>
-
-      <section className="portfolio-middle-grid">
-        <article className="allocation-card">
-          <div className="portfolio-card-header">
-            <div>
-              <span className="section-kicker">DISTRIBUTION</span>
-              <h2>Asset Allocation</h2>
-            </div>
-            <span>Portfolio %</span>
-          </div>
-          <div className="allocation-content">
-            <div className="allocation-donut">
-              <div className="allocation-donut-inner">
-                <span>Total</span>
-                <strong>
-                  {hideBalance
-                    ? hidden
-                    : formatMoney(
-                        holdings.reduce((sum, item) => sum + item.value, 0),
-                      )}
-                </strong>
-              </div>
-            </div>
-            <div className="allocation-list">
-              {holdings.map((asset) => (
-                <div className="allocation-item" key={asset.symbol}>
-                  <div className="allocation-item-name">
-                    <span className="allocation-dot"></span>
-                    <div>
-                      <strong>{asset.symbol}</strong>
-                      <span>{asset.name}</span>
-                    </div>
-                  </div>
-                  <strong>{asset.allocation.toFixed(1)}%</strong>
-                </div>
-              ))}
-            </div>
-          </div>
-        </article>
-
-        <article className="portfolio-performance-card">
-          <div className="portfolio-card-header">
-            <div>
-              <span className="section-kicker">PERFORMANCE</span>
-              <h2>Portfolio Growth</h2>
-            </div>
-            <span>Paper account</span>
-          </div>
-          <div className="performance-value">
-            <span>Net Performance</span>
-            <strong className={pnlPositive ? "positive" : "negative"}>
-              {pnlPositive ? "+" : ""}
-              {totalPnlPercent.toFixed(2)}%
-            </strong>
-          </div>
-          <div className="performance-chart">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart
-                data={growthTrend}
-                margin={{ top: 10, right: 8, left: 0, bottom: 0 }}
-              >
-                <defs>
-                  <linearGradient id="growthArea" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#d4af37" stopOpacity={0.4} />
-                    <stop offset="100%" stopColor="#d4af37" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid
-                  stroke="#202020"
-                  strokeDasharray="3 3"
-                  vertical={false}
-                />
-                <XAxis
-                  dataKey="label"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "#666", fontSize: 9 }}
-                />
-                <YAxis
-                  domain={["auto", "auto"]}
-                  axisLine={false}
-                  tickLine={false}
-                  width={82}
-                  tick={{ fill: "#555", fontSize: 8 }}
-                  tickFormatter={(value) => formatMoney(value)}
-                />
-                <Tooltip
-                  content={<PortfolioChartTooltip formatMoney={formatMoney} />}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="value"
-                  stroke="#d4af37"
-                  strokeWidth={2}
-                  fill="url(#growthArea)"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="performance-bottom">
-            <div>
-              <span>Best Performer</span>
-              <strong>{bestPerformer?.symbol || "--"}</strong>
-            </div>
-            <div>
-              <span>Return</span>
-              <strong
-                className={
-                  (bestPerformer?.profitLossPercent || 0) >= 0
-                    ? "positive"
-                    : "negative"
-                }
-              >
-                {bestPerformer
-                  ? `${bestPerformer.profitLossPercent >= 0 ? "+" : ""}${bestPerformer.profitLossPercent.toFixed(2)}%`
-                  : "--"}
-              </strong>
-            </div>
-          </div>
-          <div className="performance-bottom">
-            <div>
-              <span>Unrealized P/L</span>
-              <strong>{formatMoney(unrealizedPnl)}</strong>
-            </div>
-            <div>
-              <span>Realized P/L</span>
-              <strong>{formatMoney(realizedPnl)}</strong>
-            </div>
-          </div>
-        </article>
-      </section>
-
-      <section className="holdings-card">
-        <div className="portfolio-card-header holdings-header">
-          <div>
-            <span className="section-kicker">ASSETS</span>
-            <h2>Your Holdings</h2>
-          </div>
-          <button
-            className="text-action"
-            onClick={() => setShowAll((value) => !value)}
-          >
-            {showAll ? "Show less" : "View all holdings"}
-            <FiArrowUpRight />
-          </button>
         </div>
-        <div className="holdings-table-wrapper">
-          <table className="holdings-table">
+
+        <div className="rounded-2xl border border-zinc-800 bg-[#0b0b0b] p-5">
+          <div className="text-[11px] uppercase tracking-wider text-zinc-500">
+            Invested Capital
+          </div>
+          <div className="font-mono-num mt-2 text-2xl font-bold text-white">
+            {formatINR(portfolioSummary.investedValue)}
+          </div>
+          <div className="mt-1 text-[11px] text-zinc-500">
+            Current: {formatCompactINR(portfolioSummary.currentHoldingsValue)}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-zinc-800 bg-[#0b0b0b] p-5">
+          <div className="text-[11px] uppercase tracking-wider text-zinc-500">
+            Overall P&amp;L
+          </div>
+          <div
+            className={`font-mono-num mt-2 text-2xl font-bold ${
+              portfolioSummary.totalPnL >= 0
+                ? "text-emerald-400"
+                : "text-red-400"
+            }`}
+          >
+            {portfolioSummary.totalPnL >= 0 ? "+" : ""}
+            {formatINR(portfolioSummary.totalPnL)}
+          </div>
+          <div
+            className={`font-mono-num mt-1 text-xs font-medium ${
+              portfolioSummary.totalPnLPct >= 0
+                ? "text-emerald-400"
+                : "text-red-400"
+            }`}
+          >
+            {portfolioSummary.totalPnLPct >= 0 ? "+" : ""}
+            {portfolioSummary.totalPnLPct.toFixed(2)}%
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-zinc-800 bg-[#0b0b0b] p-5">
+          <div className="text-[11px] uppercase tracking-wider text-zinc-500">
+            Available INR Cash
+          </div>
+          <div className="font-mono-num mt-2 text-2xl font-bold text-white">
+            {formatINR(portfolioSummary.cash)}
+          </div>
+          <div className="mt-1 text-[11px] text-zinc-500">
+            Ready for NSE Equities &amp; IPOs
+          </div>
+        </div>
+      </div>
+
+      {/* Sector Exposure Chart */}
+      <div className="rounded-2xl border border-zinc-800/90 bg-[#0b0b0b] p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-bold text-white">
+              Sector Allocation (₹)
+            </h2>
+            <p className="text-[11px] text-zinc-500">
+              Distribution of active equity holdings across NSE sectors
+            </p>
+          </div>
+        </div>
+        <div className="h-56 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={sectorData}>
+              <XAxis
+                dataKey="sector"
+                stroke="#52525b"
+                tick={{ fill: "#a1a1aa", fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                stroke="#52525b"
+                tick={{ fill: "#71717a", fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`}
+              />
+              <Tooltip
+                cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                contentStyle={{
+                  backgroundColor: "#09090b",
+                  border: "1px solid #27272a",
+                  borderRadius: "10px",
+                  fontSize: "12px",
+                  color: "#fff",
+                }}
+                formatter={(val) => [formatINR(val), "Allocation"]}
+              />
+              <Bar dataKey="value" fill="#ffffff" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Holdings Table */}
+      <div className="overflow-hidden rounded-2xl border border-zinc-800/90 bg-[#0b0b0b]">
+        <div className="border-b border-zinc-800 px-5 py-4">
+          <h2 className="text-sm font-bold text-white">
+            Equity Holdings ({portfolioSummary.detailedHoldings.length})
+          </h2>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] text-left text-xs">
             <thead>
-              <tr>
-                <th>Asset</th>
-                <th>Holdings</th>
-                <th>Live Price</th>
-                <th>Value</th>
-                <th>24H</th>
-                <th>Allocation</th>
+              <tr className="border-b border-zinc-800 bg-[#080808] text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                <th className="px-4 py-3">Stock</th>
+                <th className="px-4 py-3 text-right">Qty</th>
+                <th className="px-4 py-3 text-right">Avg Buy Price</th>
+                <th className="px-4 py-3 text-right">Live LTP</th>
+                <th className="px-4 py-3 text-right">Current Value</th>
+                <th className="px-4 py-3 text-right">P&amp;L</th>
+                <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody>
-              {visibleHoldings.map((asset) => {
-                const positive = asset.change >= 0;
-                return (
-                  <tr key={asset.symbol}>
-                    <td data-label="Asset">
-                      <div className="holding-asset">
-                        <div className="market-coin-icon">{asset.icon}</div>
-                        <div>
-                          <strong>{asset.name}</strong>
-                          <span>{asset.symbol}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td data-label="Coin Holdings">
-                      {hideBalance
-                        ? hidden
-                        : `${formatNumber(asset.amount)} ${asset.symbol}`}
-                    </td>
-                    <td data-label="Live Price">{formatMoney(asset.price)}</td>
-                    <td data-label="Holding Value" className="holding-value">
-                      {hideBalance ? hidden : formatMoney(asset.value)}
-                    </td>
-                    <td data-label="24H Change">
-                      <div
-                        className={
-                          positive
-                            ? "holding-change positive"
-                            : "holding-change negative"
-                        }
+            <tbody className="divide-y divide-zinc-800/70">
+              {portfolioSummary.detailedHoldings.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={7}
+                    className="px-4 py-10 text-center text-zinc-500"
+                  >
+                    No holdings yet. Visit Markets or Trade to buy Indian stocks.
+                  </td>
+                </tr>
+              ) : (
+                portfolioSummary.detailedHoldings.map((h) => (
+                  <tr key={h.symbol} className="hover:bg-zinc-900/40">
+                    <td className="px-4 py-3.5">
+                      <button
+                        type="button"
+                        onClick={() => onSelectStock(h.symbol)}
+                        className="text-left hover:underline"
                       >
-                        {positive ? <FiArrowUpRight /> : <FiArrowDownRight />}
-                        {positive ? "+" : ""}
-                        {asset.change.toFixed(2)}%
-                      </div>
-                    </td>
-                    <td data-label="Portfolio Allocation">
-                      <div className="allocation-progress">
-                        <div>
-                          <span
-                            style={{ width: `${asset.allocation}%` }}
-                          ></span>
+                        <div className="font-bold text-white">{h.symbol}</div>
+                        <div className="text-[11px] text-zinc-500">
+                          {h.name}
                         </div>
-                        <strong>{asset.allocation.toFixed(1)}%</strong>
+                      </button>
+                    </td>
+                    <td className="font-mono-num px-4 py-3.5 text-right text-zinc-300">
+                      {h.quantity}
+                    </td>
+                    <td className="font-mono-num px-4 py-3.5 text-right text-zinc-400">
+                      {formatINR(h.averageCost)}
+                    </td>
+                    <td className="font-mono-num px-4 py-3.5 text-right font-semibold text-white">
+                      {formatINR(h.currentPrice)}
+                    </td>
+                    <td className="font-mono-num px-4 py-3.5 text-right font-semibold text-white">
+                      {formatINR(h.currentValue)}
+                    </td>
+                    <td
+                      className={`font-mono-num px-4 py-3.5 text-right font-semibold ${
+                        h.pnl >= 0 ? "text-emerald-400" : "text-red-400"
+                      }`}
+                    >
+                      {h.pnl >= 0 ? "+" : ""}
+                      {formatINR(h.pnl)} ({h.pnlPct.toFixed(2)}%)
+                    </td>
+                    <td className="px-4 py-3.5 text-right">
+                      <div className="inline-flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onSelectStock(h.symbol)}
+                          className="rounded-lg border border-zinc-800 px-2.5 py-1 text-[11px] text-zinc-300 hover:border-white hover:text-white"
+                        >
+                          Chart
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onTradeStock(h.symbol)}
+                          className="rounded-lg bg-white px-2.5 py-1 text-[11px] font-semibold text-black hover:bg-zinc-200"
+                        >
+                          Buy / Sell
+                        </button>
                       </div>
                     </td>
                   </tr>
-                );
-              })}
+                ))
+              )}
             </tbody>
           </table>
         </div>
-      </section>
-    </main>
-  );
-}
+      </div>
 
-function PortfolioChartTooltip({ active, payload, label, formatMoney }) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="portfolio-chart-tooltip">
-      <span>{label}</span>
-      <strong>{formatMoney(payload[0].value)}</strong>
+      {/* IPO Applications */}
+      <div className="overflow-hidden rounded-2xl border border-zinc-800/90 bg-[#0b0b0b]">
+        <div className="border-b border-zinc-800 px-5 py-4">
+          <h2 className="text-sm font-bold text-white">
+            IPO Applications (ASBA)
+          </h2>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-left text-xs">
+            <thead>
+              <tr className="border-b border-zinc-800 bg-[#080808] text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                <th className="px-4 py-3">Application ID</th>
+                <th className="px-4 py-3">Company</th>
+                <th className="px-4 py-3 text-right">Lots / Shares</th>
+                <th className="px-4 py-3 text-right">Bid Price</th>
+                <th className="px-4 py-3 text-right">Blocked Amount</th>
+                <th className="px-4 py-3 text-right">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-800/70">
+              {wallet.ipoApplications.map((app) => (
+                <tr key={app.id} className="hover:bg-zinc-900/40">
+                  <td className="font-mono-num px-4 py-3 text-zinc-400">
+                    {app.id}
+                  </td>
+                  <td className="px-4 py-3 font-semibold text-white">
+                    {app.company}
+                  </td>
+                  <td className="font-mono-num px-4 py-3 text-right text-zinc-300">
+                    {app.lots} Lot ({app.shares})
+                  </td>
+                  <td className="font-mono-num px-4 py-3 text-right text-zinc-300">
+                    {formatINR(app.bidPrice)}
+                  </td>
+                  <td className="font-mono-num px-4 py-3 text-right font-semibold text-white">
+                    {formatINR(app.amount)}
+                  </td>
+                  <td className="px-4 py-3 text-right text-emerald-400">
+                    {app.status}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }

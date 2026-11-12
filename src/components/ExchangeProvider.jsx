@@ -1,370 +1,523 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  COINS,
   ExchangeContext,
-  formatCurrency,
-  REST_API,
+  INDIAN_INDICES,
+  IPOS,
+  STOCKS,
 } from "./exchangeStore";
 
-const WALLET_KEY = "quantumPaperWalletV1";
-const CURRENCY_KEY = "quantumDisplayCurrency";
-const INR_FALLBACK_RATE = 96;
+const WALLET_KEY = "xchangerPaperWalletV1";
+const WATCHLIST_KEY = "xchangerWatchlistV1";
 
 const initialWallet = {
-  cash: 12480.62,
+  cash: 500000.0,
   holdings: [
-    { symbol: "BTC", amount: 0.1842, averageCost: 67842.18 },
-    { symbol: "ETH", amount: 2.46, averageCost: 3496.42 },
-    { symbol: "SOL", amount: 18.72, averageCost: 172.34 },
-    { symbol: "BNB", amount: 4.25, averageCost: 592.18 },
-    { symbol: "XRP", amount: 3200, averageCost: 0.61 },
+    { symbol: "RELIANCE", quantity: 40, averageCost: 1242.5 },
+    { symbol: "TCS", quantity: 14, averageCost: 4020.0 },
+    { symbol: "HDFCBANK", quantity: 35, averageCost: 1715.0 },
+    { symbol: "TATAMOTORS", quantity: 60, averageCost: 845.0 },
+    { symbol: "INFY", quantity: 25, averageCost: 1798.0 },
   ],
-  transactions: [],
-  history: [],
+  ipoApplications: [
+    {
+      id: "IPO-APP-9041",
+      ipoId: "ipo-swiggy",
+      company: "Swiggy Ltd",
+      symbol: "SWIGGY",
+      lots: 1,
+      shares: 38,
+      bidPrice: 390,
+      amount: 14820,
+      status: "Allotted",
+      createdAt: "2026-11-08T10:15:00.000Z",
+    },
+  ],
+  transactions: [
+    {
+      id: "XCH-88412",
+      side: "BUY",
+      symbol: "RELIANCE",
+      name: "Reliance Industries Ltd",
+      orderType: "MARKET",
+      productType: "CNC",
+      quantity: 40,
+      price: 1242.5,
+      charges: 54.67,
+      total: 49754.67,
+      status: "Executed",
+      createdAt: "2026-11-10T09:42:00.000Z",
+    },
+    {
+      id: "XCH-88419",
+      side: "BUY",
+      symbol: "TCS",
+      name: "Tata Consultancy Services Ltd",
+      orderType: "LIMIT",
+      productType: "CNC",
+      quantity: 14,
+      price: 4020.0,
+      charges: 61.91,
+      total: 56341.91,
+      status: "Executed",
+      createdAt: "2026-11-11T11:18:00.000Z",
+    },
+    {
+      id: "XCH-88425",
+      side: "BUY",
+      symbol: "INFY",
+      name: "Infosys Ltd",
+      orderType: "MARKET",
+      productType: "CNC",
+      quantity: 25,
+      price: 1798.0,
+      charges: 49.45,
+      total: 44999.45,
+      status: "Executed",
+      createdAt: "2026-11-11T14:26:00.000Z",
+    },
+  ],
 };
+
+const initialWatchlist = ["RELIANCE", "TCS", "INFY", "ETERNAL", "LT"];
 
 function loadWallet() {
   try {
     const saved = JSON.parse(localStorage.getItem(WALLET_KEY));
-    return saved?.cash != null ? { ...initialWallet, ...saved } : initialWallet;
+    if (saved && typeof saved.cash === "number" && Array.isArray(saved.holdings)) {
+      return { ...initialWallet, ...saved };
+    }
+    return initialWallet;
   } catch {
     return initialWallet;
   }
 }
 
-function fallbackTickers() {
+function loadWatchlist() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(WATCHLIST_KEY));
+    return Array.isArray(saved) ? saved : initialWatchlist;
+  } catch {
+    return initialWatchlist;
+  }
+}
+
+function buildInitialTickers() {
   return Object.fromEntries(
-    COINS.map((coin) => [
-      coin.symbol,
+    STOCKS.map((stock) => [
+      stock.symbol,
       {
-        price: coin.fallback,
-        change: 0,
-        high: coin.fallback,
-        low: coin.fallback,
-        volume: 0,
-        trades: 0,
+        price: stock.basePrice,
+        change: stock.baseChange,
+        high: stock.dayHigh,
+        low: stock.dayLow,
+        direction: "flat",
+        tickId: 0,
       },
     ]),
   );
 }
 
-function tickerFromApi(item) {
-  return {
-    price: Number(item.lastPrice ?? item.c),
-    change: Number(item.priceChangePercent ?? item.P),
-    high: Number(item.highPrice ?? item.h),
-    low: Number(item.lowPrice ?? item.l),
-    volume: Number(item.quoteVolume ?? item.q),
-    trades: Number(item.count ?? item.n),
-  };
+function buildInitialIndices() {
+  return INDIAN_INDICES.map((idx) => ({
+    ...idx,
+    price: idx.basePrice,
+    change: idx.baseChange,
+    direction: "flat",
+  }));
 }
 
 function ExchangeProvider({ children }) {
-  const [tickers, setTickers] = useState(fallbackTickers);
-  const [sparklines, setSparklines] = useState({});
-  const [marketStatus, setMarketStatus] = useState("loading");
-  const [lastUpdated, setLastUpdated] = useState(null);
-  const [selectedSymbol, setSelectedSymbol] = useState("BTC");
+  const [tickers, setTickers] = useState(buildInitialTickers);
+  const [indices, setIndices] = useState(buildInitialIndices);
+  const [selectedSymbol, setSelectedSymbol] = useState("RELIANCE");
   const [wallet, setWallet] = useState(loadWallet);
-  const [currency, setCurrency] = useState(
-    () => localStorage.getItem(CURRENCY_KEY) || "USD",
-  );
-  const [usdToInr, setUsdToInr] = useState(INR_FALLBACK_RATE);
+  const [watchlist, setWatchlist] = useState(loadWatchlist);
+  const [lastUpdated, setLastUpdated] = useState(() => Date.now());
 
-  const updateTicker = useCallback((pair, payload) => {
-    const coin = COINS.find((item) => item.pair === pair);
-    if (!coin) return;
+  // Simulated NSE/BSE live market tick every 2.5 seconds
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setTickers((prev) => {
+        const next = { ...prev };
+        // Update 5-7 random stocks per tick for realistic market pulse
+        STOCKS.forEach((stock) => {
+          if (Math.random() > 0.45) return;
+          const current = prev[stock.symbol];
+          const deltaPct = (Math.random() - 0.49) * 0.0045; // +/- ~0.22%
+          const nextPrice = Math.max(
+            stock.prevClose * 0.85,
+            Number((current.price * (1 + deltaPct)).toFixed(2)),
+          );
+          const changePct = Number(
+            (((nextPrice - stock.prevClose) / stock.prevClose) * 100).toFixed(2),
+          );
+          const direction =
+            nextPrice > current.price
+              ? "up"
+              : nextPrice < current.price
+                ? "down"
+                : "flat";
 
-    setTickers((current) => ({
-      ...current,
-      [coin.symbol]: tickerFromApi(payload),
-    }));
-    setMarketStatus("live");
-    setLastUpdated(Date.now());
+          next[stock.symbol] = {
+            price: nextPrice,
+            change: changePct,
+            high: Math.max(current.high, nextPrice),
+            low: Math.min(current.low, nextPrice),
+            direction,
+            tickId: current.tickId + 1,
+          };
+        });
+        return next;
+      });
+
+      setIndices((prev) =>
+        prev.map((idx) => {
+          if (Math.random() > 0.65) return { ...idx, direction: "flat" };
+          const deltaPct = (Math.random() - 0.49) * 0.0014;
+          const nextPrice = Number((idx.price * (1 + deltaPct)).toFixed(2));
+          const prevBase = idx.basePrice / (1 + idx.baseChange / 100);
+          const nextChange = Number(
+            (((nextPrice - prevBase) / prevBase) * 100).toFixed(2),
+          );
+          const nextPoints = Number((nextPrice - prevBase).toFixed(2));
+          return {
+            ...idx,
+            price: nextPrice,
+            change: nextChange,
+            points: nextPoints,
+            direction:
+              nextPrice > idx.price
+                ? "up"
+                : nextPrice < idx.price
+                  ? "down"
+                  : "flat",
+          };
+        }),
+      );
+
+      setLastUpdated(Date.now());
+    }, 2500);
+
+    return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
-    let active = true;
-    let socket;
-    let pollTimer;
-
-    const fetchTickers = async () => {
-      try {
-        const symbols = encodeURIComponent(
-          JSON.stringify(COINS.map((coin) => coin.pair)),
-        );
-        const response = await fetch(
-          `${REST_API}/ticker/24hr?symbols=${symbols}`,
-        );
-        if (!response.ok) throw new Error("Market data request failed");
-        const data = await response.json();
-        if (!active) return;
-        data.forEach((item) => updateTicker(item.symbol, item));
-      } catch {
-        if (active)
-          setMarketStatus((status) => (status === "live" ? status : "delayed"));
-      }
-    };
-
-    fetchTickers();
-    pollTimer = window.setInterval(fetchTickers, 15000);
-
     try {
-      const streams = COINS.map(
-        (coin) => `${coin.pair.toLowerCase()}@ticker`,
-      ).join("/");
-      socket = new WebSocket(
-        `wss://data-stream.binance.vision/stream?streams=${streams}`,
-      );
-      socket.onmessage = (event) => {
-        const message = JSON.parse(event.data);
-        updateTicker(message.data.s, message.data);
-      };
-      socket.onerror = () =>
-        setMarketStatus((status) => (status === "live" ? status : "delayed"));
+      localStorage.setItem(WALLET_KEY, JSON.stringify(wallet));
     } catch {
-      queueMicrotask(() => active && setMarketStatus("delayed"));
+      // ignore storage quota errors
     }
-
-    Promise.all(
-      COINS.slice(0, 4).map(async (coin) => {
-        const response = await fetch(
-          `${REST_API}/klines?symbol=${coin.pair}&interval=1h&limit=8`,
-        );
-        const rows = response.ok ? await response.json() : [];
-        return [coin.symbol, rows.map((row) => Number(row[4]))];
-      }),
-    )
-      .then((entries) => active && setSparklines(Object.fromEntries(entries)))
-      .catch(() => {});
-
-    return () => {
-      active = false;
-      window.clearInterval(pollTimer);
-      if (socket?.readyState === WebSocket.OPEN) socket.close();
-      if (socket?.readyState === WebSocket.CONNECTING)
-        socket.onopen = () => socket.close();
-    };
-  }, [updateTicker]);
-
-  useEffect(() => {
-    localStorage.setItem(WALLET_KEY, JSON.stringify(wallet));
   }, [wallet]);
 
   useEffect(() => {
-    localStorage.setItem(CURRENCY_KEY, currency);
-  }, [currency]);
+    try {
+      localStorage.setItem(WATCHLIST_KEY, JSON.stringify(watchlist));
+    } catch {
+      // ignore storage quota errors
+    }
+  }, [watchlist]);
 
-  useEffect(() => {
-    let active = true;
-    const fetchRate = async () => {
-      try {
-        const response = await fetch(
-          "https://api.frankfurter.dev/v2/rate/USD/INR",
-        );
-        if (!response.ok) throw new Error("Currency rate request failed");
-        const data = await response.json();
-        if (active && Number(data.rate) > 0) setUsdToInr(Number(data.rate));
-      } catch {
-        // Keep the last safe fallback rate when the reference-rate service is unavailable.
-      }
-    };
-    fetchRate();
-    const rateTimer = window.setInterval(fetchRate, 6 * 60 * 60 * 1000);
-    return () => {
-      active = false;
-      window.clearInterval(rateTimer);
-    };
+  const toggleWatchlist = useCallback((symbol) => {
+    setWatchlist((prev) =>
+      prev.includes(symbol)
+        ? prev.filter((item) => item !== symbol)
+        : [...prev, symbol],
+    );
   }, []);
 
-  const convertUsd = useCallback(
-    (value) => Number(value || 0) * (currency === "INR" ? usdToInr : 1),
-    [currency, usdToInr],
-  );
-  const convertToUsd = useCallback(
-    (value) => Number(value || 0) / (currency === "INR" ? usdToInr : 1),
-    [currency, usdToInr],
-  );
-  const formatMoney = useCallback(
-    (value) => formatCurrency(convertUsd(value), currency),
-    [convertUsd, currency],
-  );
-
-  const coins = useMemo(
-    () => COINS.map((coin) => ({ ...coin, ...tickers[coin.symbol] })),
-    [tickers],
-  );
-
-  const holdings = useMemo(() => {
-    const values = wallet.holdings.map((holding) => {
-      const coin = coins.find((item) => item.symbol === holding.symbol);
-      const price = coin?.price || holding.averageCost;
-      const value = holding.amount * price;
-      const profitLoss = (price - holding.averageCost) * holding.amount;
-      const profitLossPercent = holding.averageCost
-        ? ((price - holding.averageCost) / holding.averageCost) * 100
-        : 0;
-      return {
-        ...holding,
-        ...coin,
-        price,
-        value,
-        profitLoss,
-        profitLossPercent,
-      };
-    });
-    const holdingsValue = values.reduce((sum, item) => sum + item.value, 0);
-    return values.map((item) => ({
-      ...item,
-      allocation: holdingsValue ? (item.value / holdingsValue) * 100 : 0,
-    }));
-  }, [coins, wallet.holdings]);
-
-  const holdingsValue = holdings.reduce((sum, item) => sum + item.value, 0);
-  const totalBalance = wallet.cash + holdingsValue;
-  const unrealizedPnl = holdings.reduce(
-    (sum, item) => sum + item.profitLoss,
-    0,
-  );
-  const realizedPnl = wallet.transactions.reduce(
-    (sum, item) => sum + (item.realizedPnl || 0),
-    0,
-  );
-  const totalPnl = unrealizedPnl + realizedPnl;
-
-  const addFunds = useCallback(() => {
-    setWallet((current) => ({ ...current, cash: current.cash + 1000 }));
-  }, []);
-
-  const executeTrade = useCallback(
-    ({ side, symbol, amount, orderType, limitPriceUsd }) => {
-      const coin = coins.find((item) => item.symbol === symbol);
-      const quantity = Number(amount);
-      const executionPrice =
-        orderType === "limit" ? Number(limitPriceUsd) : coin?.price;
-
-      if (!coin || !executionPrice || !quantity || quantity <= 0) {
-        return { ok: false, message: "Enter a valid amount and price." };
+  const executeOrder = useCallback(
+    ({
+      symbol,
+      side,
+      orderType = "MARKET",
+      productType = "CNC",
+      quantity,
+      price,
+    }) => {
+      const stock = STOCKS.find((s) => s.symbol === symbol);
+      if (!stock) {
+        return { ok: false, message: "Selected stock not found." };
       }
 
-      const currentHolding = wallet.holdings.find(
-        (item) => item.symbol === symbol,
-      );
-      const gross = quantity * executionPrice;
-      const fee = gross * 0.001;
+      const qty = Math.floor(Number(quantity));
+      if (!Number.isFinite(qty) || qty <= 0) {
+        return { ok: false, message: "Enter a valid whole number of shares." };
+      }
 
-      if (side === "buy" && gross + fee > wallet.cash) {
+      const livePrice = tickers[symbol]?.price || stock.basePrice;
+      const execPrice =
+        orderType === "LIMIT" ? Number(price) : Number(livePrice);
+
+      if (!Number.isFinite(execPrice) || execPrice <= 0) {
+        return { ok: false, message: "Enter a valid execution price." };
+      }
+
+      const grossValue = qty * execPrice;
+      // Simulated Indian statutory charges (0% brokerage + ~0.11% STT/Exchange/GST)
+      const charges = Number((grossValue * 0.0011).toFixed(2));
+      const totalBuyCost = grossValue + charges;
+      const netSellProceeds = Math.max(0, grossValue - charges);
+
+      if (side === "BUY") {
+        if (totalBuyCost > wallet.cash) {
+          return {
+            ok: false,
+            message: "Insufficient INR funds in your paper trading wallet.",
+          };
+        }
+
+        setWallet((prev) => {
+          const existing = prev.holdings.find((h) => h.symbol === symbol);
+          let nextHoldings;
+          if (existing) {
+            const totalQty = existing.quantity + qty;
+            const weightedAvg =
+              (existing.quantity * existing.averageCost + grossValue) /
+              totalQty;
+            nextHoldings = prev.holdings.map((h) =>
+              h.symbol === symbol
+                ? {
+                    ...h,
+                    quantity: totalQty,
+                    averageCost: Number(weightedAvg.toFixed(2)),
+                  }
+                : h,
+            );
+          } else {
+            nextHoldings = [
+              ...prev.holdings,
+              {
+                symbol,
+                quantity: qty,
+                averageCost: Number(execPrice.toFixed(2)),
+              },
+            ];
+          }
+
+          const newTx = {
+            id: `XCH-${Math.floor(10000 + Math.random() * 90000)}`,
+            side: "BUY",
+            symbol,
+            name: stock.name,
+            orderType,
+            productType,
+            quantity: qty,
+            price: Number(execPrice.toFixed(2)),
+            charges,
+            total: Number(totalBuyCost.toFixed(2)),
+            status: "Executed",
+            createdAt: new Date().toISOString(),
+          };
+
+          return {
+            ...prev,
+            cash: Number((prev.cash - totalBuyCost).toFixed(2)),
+            holdings: nextHoldings,
+            transactions: [newTx, ...prev.transactions],
+          };
+        });
+
         return {
-          ok: false,
-          message: `Not enough ${currency} balance for this paper trade.`,
+          ok: true,
+          message: `Bought ${qty} shares of ${symbol} @ ₹${execPrice.toFixed(2)}`,
         };
       }
 
-      if (
-        side === "sell" &&
-        (!currentHolding || quantity > currentHolding.amount + 1e-10)
-      ) {
+      // SELL
+      const existing = wallet.holdings.find((h) => h.symbol === symbol);
+      if (!existing || existing.quantity < qty) {
         return {
           ok: false,
-          message: `You do not hold enough ${symbol} to sell that amount.`,
+          message: `Insufficient ${symbol} shares. Available: ${existing?.quantity || 0}`,
         };
       }
 
-      let nextHoldings;
-      let realizedTradePnl = 0;
+      setWallet((prev) => {
+        const nextHoldings = prev.holdings
+          .map((h) =>
+            h.symbol === symbol ? { ...h, quantity: h.quantity - qty } : h,
+          )
+          .filter((h) => h.quantity > 0);
 
-      if (side === "buy") {
-        const oldAmount = currentHolding?.amount || 0;
-        const oldCost = currentHolding?.averageCost || 0;
-        const newAmount = oldAmount + quantity;
-        const averageCost =
-          (oldAmount * oldCost + quantity * executionPrice + fee) / newAmount;
-        const updated = { symbol, amount: newAmount, averageCost };
-        nextHoldings = currentHolding
-          ? wallet.holdings.map((item) =>
-              item.symbol === symbol ? updated : item,
-            )
-          : [...wallet.holdings, updated];
-      } else {
-        realizedTradePnl =
-          (executionPrice - currentHolding.averageCost) * quantity - fee;
-        const remaining = currentHolding.amount - quantity;
-        nextHoldings =
-          remaining > 1e-10
-            ? wallet.holdings.map((item) =>
-                item.symbol === symbol ? { ...item, amount: remaining } : item,
-              )
-            : wallet.holdings.filter((item) => item.symbol !== symbol);
-      }
+        const newTx = {
+          id: `XCH-${Math.floor(10000 + Math.random() * 90000)}`,
+          side: "SELL",
+          symbol,
+          name: stock.name,
+          orderType,
+          productType,
+          quantity: qty,
+          price: Number(execPrice.toFixed(2)),
+          charges,
+          total: Number(netSellProceeds.toFixed(2)),
+          status: "Executed",
+          createdAt: new Date().toISOString(),
+        };
 
-      const nextCash =
-        side === "buy" ? wallet.cash - gross - fee : wallet.cash + gross - fee;
-      const now = new Date();
-      const transaction = {
-        id: `QTX-${now.getTime().toString().slice(-8)}`,
-        symbol,
-        crypto: coin.name,
-        icon: coin.icon,
-        type: side === "buy" ? "Buy" : "Sell",
-        amount: quantity,
-        price: executionPrice,
-        total: gross,
-        fee,
-        realizedPnl: realizedTradePnl,
-        averageCostAtTrade: currentHolding?.averageCost || executionPrice,
-        status: "Completed",
-        timestamp: now.toISOString(),
-      };
-
-      const nextHoldingsValue = nextHoldings.reduce((sum, item) => {
-        const livePrice =
-          coins.find((coinItem) => coinItem.symbol === item.symbol)?.price ||
-          item.averageCost;
-        return sum + item.amount * livePrice;
-      }, 0);
-
-      setWallet({
-        cash: nextCash,
-        holdings: nextHoldings,
-        transactions: [transaction, ...wallet.transactions],
-        history: [
-          ...wallet.history,
-          { timestamp: now.toISOString(), value: nextCash + nextHoldingsValue },
-        ].slice(-30),
+        return {
+          ...prev,
+          cash: Number((prev.cash + netSellProceeds).toFixed(2)),
+          holdings: nextHoldings,
+          transactions: [newTx, ...prev.transactions],
+        };
       });
 
       return {
         ok: true,
-        message: `Successfully ${side === "buy" ? "bought" : "sold"} ${quantity.toLocaleString(undefined, { maximumFractionDigits: 8 })} ${symbol} at ${formatMoney(executionPrice)}.`,
+        message: `Sold ${qty} shares of ${symbol} @ ₹${execPrice.toFixed(2)}`,
       };
     },
-    [coins, currency, formatMoney, wallet],
+    [tickers, wallet.cash, wallet.holdings],
   );
 
-  const value = {
-    coins,
-    tickers,
-    sparklines,
-    marketStatus,
-    lastUpdated,
-    selectedSymbol,
-    setSelectedSymbol,
-    wallet,
-    holdings,
-    holdingsValue,
-    totalBalance,
-    unrealizedPnl,
-    realizedPnl,
-    totalPnl,
-    addFunds,
-    executeTrade,
-    currency,
-    setCurrency,
-    usdToInr,
-    convertUsd,
-    convertToUsd,
-    formatMoney,
-  };
+  const applyIpo = useCallback(
+    (ipoId, lots = 1) => {
+      const ipo = IPOS.find((item) => item.id === ipoId);
+      if (!ipo) return { ok: false, message: "IPO not found." };
+      if (ipo.status !== "Open") {
+        return { ok: false, message: "This IPO is not currently open for bidding." };
+      }
+      const lotCount = Math.max(1, Math.min(10, Math.floor(Number(lots) || 1)));
+      const shares = lotCount * ipo.lotSize;
+      const amount = shares * ipo.issuePrice;
+
+      if (amount > wallet.cash) {
+        return {
+          ok: false,
+          message: `Insufficient funds. Required: ₹${amount.toLocaleString("en-IN")}`,
+        };
+      }
+
+      setWallet((prev) => {
+        const app = {
+          id: `IPO-${Math.floor(1000 + Math.random() * 9000)}`,
+          ipoId: ipo.id,
+          company: ipo.company,
+          symbol: ipo.symbol,
+          lots: lotCount,
+          shares,
+          bidPrice: ipo.issuePrice,
+          amount,
+          status: "Bid Placed (ASBA)",
+          createdAt: new Date().toISOString(),
+        };
+
+        const tx = {
+          id: `XCH-${Math.floor(10000 + Math.random() * 90000)}`,
+          side: "IPO",
+          symbol: ipo.symbol,
+          name: ipo.company,
+          orderType: "CUT-OFF",
+          productType: "ASBA",
+          quantity: shares,
+          price: ipo.issuePrice,
+          charges: 0,
+          total: amount,
+          status: "Blocked",
+          createdAt: new Date().toISOString(),
+        };
+
+        return {
+          ...prev,
+          cash: Number((prev.cash - amount).toFixed(2)),
+          ipoApplications: [app, ...prev.ipoApplications],
+          transactions: [tx, ...prev.transactions],
+        };
+      });
+
+      return {
+        ok: true,
+        message: `IPO bid placed for ${lotCount} lot(s) (${shares} shares) of ${ipo.symbol}`,
+      };
+    },
+    [wallet.cash],
+  );
+
+  const resetWallet = useCallback(() => {
+    setWallet(initialWallet);
+  }, []);
+
+  const portfolioSummary = useMemo(() => {
+    const detailedHoldings = wallet.holdings.map((holding) => {
+      const stock = STOCKS.find((s) => s.symbol === holding.symbol);
+      const ticker = tickers[holding.symbol];
+      const currentPrice = ticker?.price || stock?.basePrice || holding.averageCost;
+      const prevClose = stock?.prevClose || currentPrice;
+      const invested = holding.quantity * holding.averageCost;
+      const currentValue = holding.quantity * currentPrice;
+      const pnl = currentValue - invested;
+      const pnlPct = invested > 0 ? (pnl / invested) * 100 : 0;
+      const dayChange = holding.quantity * (currentPrice - prevClose);
+
+      return {
+        ...holding,
+        name: stock?.name || holding.symbol,
+        sector: stock?.sector || "Equity",
+        currentPrice,
+        changePct: ticker?.change ?? stock?.baseChange ?? 0,
+        direction: ticker?.direction || "flat",
+        invested,
+        currentValue,
+        pnl,
+        pnlPct,
+        dayChange,
+      };
+    });
+
+    const investedValue = detailedHoldings.reduce((acc, h) => acc + h.invested, 0);
+    const currentHoldingsValue = detailedHoldings.reduce(
+      (acc, h) => acc + h.currentValue,
+      0,
+    );
+    const dayPnL = detailedHoldings.reduce((acc, h) => acc + h.dayChange, 0);
+
+    const totalPnL = currentHoldingsValue - investedValue;
+    const totalPnLPct = investedValue > 0 ? (totalPnL / investedValue) * 100 : 0;
+    const totalAccountValue = wallet.cash + currentHoldingsValue;
+
+    return {
+      cash: wallet.cash,
+      investedValue,
+      currentHoldingsValue,
+      totalAccountValue,
+      totalPnL,
+      totalPnLPct,
+      dayPnL,
+      detailedHoldings,
+    };
+  }, [tickers, wallet.cash, wallet.holdings]);
+
+  const value = useMemo(
+    () => ({
+      stocks: STOCKS,
+      ipos: IPOS,
+      indices,
+      tickers,
+      selectedSymbol,
+      setSelectedSymbol,
+      wallet,
+      watchlist,
+      toggleWatchlist,
+      executeOrder,
+      applyIpo,
+      resetWallet,
+      portfolioSummary,
+      lastUpdated,
+    }),
+    [
+      indices,
+      tickers,
+      selectedSymbol,
+      wallet,
+      watchlist,
+      toggleWatchlist,
+      executeOrder,
+      applyIpo,
+      resetWallet,
+      portfolioSummary,
+      lastUpdated,
+    ],
+  );
 
   return (
     <ExchangeContext.Provider value={value}>

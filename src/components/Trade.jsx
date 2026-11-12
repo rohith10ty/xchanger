@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
-import { FiArrowDownRight, FiArrowUpRight } from "react-icons/fi";
+import { useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -9,575 +8,541 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { formatNumber, REST_API, useExchange } from "./exchangeStore";
-import "./Trade.css";
+import { FiCheckCircle, FiClock, FiSliders } from "react-icons/fi";
+import {
+  formatINR,
+  generateChartSeries,
+  useExchange,
+} from "./exchangeStore";
 
-const periodConfig = {
-  "1H": { interval: "5m", limit: 12 },
-  "1D": { interval: "1h", limit: 24 },
-  "1W": { interval: "4h", limit: 42 },
-  "1M": { interval: "1d", limit: 30 },
-};
-
-function chartLabel(timestamp, period) {
-  const date = new Date(timestamp);
-  if (period === "1M")
-    return date.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-    });
-  if (period === "1W")
-    return date.toLocaleDateString(undefined, {
-      weekday: "short",
-      hour: "2-digit",
-    });
-  return date.toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function Trade() {
+function Trade({ onSelectStock }) {
   const {
-    coins,
+    stocks,
+    tickers,
     selectedSymbol,
     setSelectedSymbol,
-    tickers,
     wallet,
-    holdings,
-    executeTrade,
-    marketStatus,
-    currency,
-    convertUsd,
-    convertToUsd,
-    formatMoney,
+    executeOrder,
   } = useExchange();
-  const [period, setPeriod] = useState("1D");
-  const [side, setSide] = useState("buy");
-  const [orderType, setOrderType] = useState("market");
-  const [amount, setAmount] = useState("");
-  const [limitPrice, setLimitPrice] = useState("");
-  const [message, setMessage] = useState(null);
-  const [chartData, setChartData] = useState([]);
-  const [orderBook, setOrderBook] = useState({ asks: [], bids: [] });
 
-  const coin = coins.find((item) => item.symbol === selectedSymbol) || coins[0];
-  const ticker = tickers[coin.symbol];
-  const currentPriceUsd = ticker?.price || coin.fallback;
-  const currentPrice = convertUsd(currentPriceUsd);
-  const effectivePriceUsd =
-    orderType === "market" ? currentPriceUsd : convertToUsd(limitPrice);
-  const holding = holdings.find((item) => item.symbol === coin.symbol);
+  const stock = useMemo(
+    () => stocks.find((s) => s.symbol === selectedSymbol) || stocks[0],
+    [selectedSymbol, stocks],
+  );
 
-  const total = useMemo(() => {
-    const quantity = Number(amount);
-    return quantity > 0 && effectivePriceUsd > 0
-      ? quantity * effectivePriceUsd
-      : 0;
-  }, [amount, effectivePriceUsd]);
+  const ticker = tickers[stock.symbol];
+  const livePrice = ticker?.price ?? stock.basePrice;
+  const changePct = ticker?.change ?? stock.baseChange;
+  const isUp = changePct >= 0;
 
-  useEffect(() => {
-    const controller = new AbortController();
-    const config = periodConfig[period];
+  const [side, setSide] = useState("BUY");
+  const [orderType, setOrderType] = useState("MARKET");
+  const [productType, setProductType] = useState("CNC");
+  const [quantity, setQuantity] = useState("10");
+  const [limitPrice, setLimitPrice] = useState(() => livePrice.toFixed(2));
+  const [timeframe, setTimeframe] = useState("1D");
+  const [feedback, setFeedback] = useState(null);
 
-    const loadChart = async () => {
-      try {
-        const response = await fetch(
-          `${REST_API}/klines?symbol=${coin.pair}&interval=${config.interval}&limit=${config.limit}`,
-          { signal: controller.signal },
-        );
-        if (!response.ok) throw new Error("Chart request failed");
-        const rows = await response.json();
-        setChartData(
-          rows.map((row) => ({
-            time: chartLabel(row[0], period),
-            price: convertUsd(Number(row[4])),
-            high: convertUsd(Number(row[2])),
-            low: convertUsd(Number(row[3])),
-          })),
-        );
-      } catch (error) {
-        if (error.name !== "AbortError")
-          setChartData([{ time: "Live", price: convertUsd(coin.fallback) }]);
-      }
-    };
+  const effectivePrice =
+    orderType === "MARKET" ? livePrice : Number(limitPrice) || 0;
+  const qtyNum = Math.max(0, Math.floor(Number(quantity) || 0));
+  const grossValue = qtyNum * effectivePrice;
+  const statutoryCharges = Number((grossValue * 0.0011).toFixed(2));
+  const netTotal =
+    side === "BUY"
+      ? grossValue + statutoryCharges
+      : Math.max(0, grossValue - statutoryCharges);
 
-    loadChart();
-    return () => controller.abort();
-  }, [coin.fallback, coin.pair, convertUsd, period]);
+  const holding = wallet.holdings.find((h) => h.symbol === stock.symbol);
 
-  useEffect(() => {
-    let active = true;
-    const loadDepth = async () => {
-      try {
-        const response = await fetch(
-          `${REST_API}/depth?symbol=${coin.pair}&limit=10`,
-        );
-        if (!response.ok) throw new Error("Depth request failed");
-        const data = await response.json();
-        if (active) {
-          setOrderBook({
-            asks: data.asks
-              .slice(0, 5)
-              .reverse()
-              .map(([price, quantity]) => ({
-                price: Number(price),
-                amount: Number(quantity),
-              })),
-            bids: data.bids
-              .slice(0, 5)
-              .map(([price, quantity]) => ({
-                price: Number(price),
-                amount: Number(quantity),
-              })),
-          });
-        }
-      } catch {
-        if (active) setOrderBook({ asks: [], bids: [] });
-      }
-    };
+  const chartData = useMemo(
+    () => generateChartSeries(stock, livePrice, timeframe),
+    [stock, livePrice, timeframe],
+  );
 
-    loadDepth();
-    const timer = window.setInterval(loadDepth, 5000);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
-  }, [coin.pair]);
+  // Simulated NSE Bid/Ask ladder
+  const orderBook = useMemo(() => {
+    const bids = [1, 2, 3, 4].map((step) => ({
+      price: Number((livePrice - step * 0.65).toFixed(2)),
+      qty: Math.round(120 + step * 85 + (livePrice % 40)),
+    }));
+    const asks = [1, 2, 3, 4].map((step) => ({
+      price: Number((livePrice + step * 0.65).toFixed(2)),
+      qty: Math.round(110 + step * 78 + (livePrice % 35)),
+    }));
+    return { bids, asks };
+  }, [livePrice]);
 
-  const handleSubmit = () => {
-    const result = executeTrade({
-      side,
-      symbol: coin.symbol,
-      amount,
-      orderType,
-      limitPriceUsd: convertToUsd(limitPrice),
-    });
-    setMessage(result);
-    if (result.ok) setAmount("");
+  const handleStockChange = (sym) => {
+    setSelectedSymbol(sym);
+    const nextStock = stocks.find((s) => s.symbol === sym);
+    const nextPrice = tickers[sym]?.price ?? nextStock?.basePrice ?? 0;
+    setLimitPrice(nextPrice.toFixed(2));
   };
 
-  const choosePercentage = (percentage) => {
-    if (!effectivePriceUsd) return;
-    const quantity =
-      side === "buy"
-        ? (wallet.cash * (percentage / 100)) / (effectivePriceUsd * 1.001)
-        : (holding?.amount || 0) * (percentage / 100);
-    setAmount(quantity > 0 ? quantity.toFixed(6) : "");
+  const handleSubmitOrder = (e) => {
+    e.preventDefault();
+    const res = executeOrder({
+      symbol: stock.symbol,
+      side,
+      orderType,
+      productType,
+      quantity: qtyNum,
+      price: effectivePrice,
+    });
+    setFeedback(res);
+    setTimeout(() => setFeedback(null), 4500);
   };
 
   return (
-    <main className="trade-page">
-      <section className="trade-topbar">
-        <div className="trade-pair">
-          <div className="trade-pair-icon">{coin.icon}</div>
-          <div>
-            <div className="trade-pair-name">
-              <select
-                className="trade-coin-select"
-                aria-label="Trading pair"
-                value={coin.symbol}
-                onChange={(event) => {
-                  setSelectedSymbol(event.target.value);
-                  setAmount("");
-                  setMessage(null);
-                }}
-              >
-                {coins.map((item) => (
-                  <option key={item.symbol} value={item.symbol}>
-                    {item.symbol} / {currency}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <span>
-              {coin.name} · {marketStatus === "live" ? "Live" : "Delayed"}
-            </span>
-          </div>
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <span className="text-[11px] font-semibold uppercase tracking-widest text-zinc-500">
+            Paper Execution Desk • NSE
+          </span>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+            Buy &amp; Sell Terminal
+          </h1>
         </div>
 
-        <div className="trade-market-stats">
-          <div>
-            <span>Price</span>
-            <strong>{formatMoney(currentPriceUsd)}</strong>
-          </div>
-          <div>
-            <span>24H Change</span>
-            <strong className={ticker.change >= 0 ? "positive" : "negative"}>
-              {ticker.change >= 0 ? "+" : ""}
-              {ticker.change.toFixed(2)}%
-            </strong>
-          </div>
-          <div>
-            <span>24H Low</span>
-            <strong>{formatMoney(ticker.low)}</strong>
-          </div>
-          <div>
-            <span>24H Volume</span>
-            <strong>{formatMoney(ticker.volume)}</strong>
-          </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            value={stock.symbol}
+            onChange={(e) => handleStockChange(e.target.value)}
+            className="rounded-xl border border-zinc-800 bg-[#0b0b0b] px-4 py-2 text-xs font-semibold text-white outline-none focus:border-white"
+          >
+            {stocks.map((s) => (
+              <option key={s.symbol} value={s.symbol}>
+                {s.symbol} — {s.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => onSelectStock(stock.symbol)}
+            className="rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2 text-xs font-medium text-zinc-300 transition-colors hover:border-white hover:text-white"
+          >
+            View Stock Details
+          </button>
         </div>
-      </section>
+      </div>
 
-      <section className="trading-layout">
-        <div className="trading-main-column">
-          <section className="trade-chart-card">
-            <div className="trade-chart-header">
+      {/* Main Terminal Grid */}
+      <div className="grid gap-6 lg:grid-cols-12">
+        {/* Left: Chart + Market Depth */}
+        <div className="space-y-6 lg:col-span-8">
+          <div className="rounded-2xl border border-zinc-800/90 bg-[#0b0b0b] p-5">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
               <div>
-                <span className="section-kicker">
-                  {coin.symbol} / {currency} · LIVE CANDLES
-                </span>
-                <div className="trade-current-price">
-                  <h2>{formatMoney(currentPriceUsd)}</h2>
-                  <div
-                    className={
-                      ticker.change >= 0
-                        ? "trade-price-change positive"
-                        : "trade-price-change negative"
-                    }
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-bold text-white">
+                    {stock.symbol}
+                  </h2>
+                  <span className="rounded bg-zinc-900 px-2 py-0.5 text-[10px] text-zinc-400">
+                    {stock.exchange}
+                  </span>
+                </div>
+                <div className="font-mono-num mt-1 flex items-baseline gap-2.5">
+                  <span className="text-2xl font-bold text-white">
+                    {formatINR(livePrice)}
+                  </span>
+                  <span
+                    className={`text-xs font-semibold ${
+                      isUp ? "text-emerald-400" : "text-red-400"
+                    }`}
                   >
-                    {ticker.change >= 0 ? (
-                      <FiArrowUpRight />
-                    ) : (
-                      <FiArrowDownRight />
-                    )}
-                    {ticker.change >= 0 ? "+" : ""}
-                    {ticker.change.toFixed(2)}%
-                  </div>
+                    {isUp ? "+" : ""}
+                    {changePct.toFixed(2)}%
+                  </span>
                 </div>
               </div>
-              <div className="trade-periods">
-                {Object.keys(periodConfig).map((item) => (
+
+              <div className="flex items-center gap-1 rounded-xl border border-zinc-800 bg-[#060606] p-1">
+                {["1D", "1W", "1M"].map((tf) => (
                   <button
-                    key={item}
-                    className={period === item ? "active" : ""}
-                    onClick={() => setPeriod(item)}
+                    key={tf}
+                    type="button"
+                    onClick={() => setTimeframe(tf)}
+                    className={`rounded-lg px-3 py-1 text-xs font-medium ${
+                      timeframe === tf
+                        ? "bg-white text-black"
+                        : "text-zinc-400 hover:text-white"
+                    }`}
                   >
-                    {item}
+                    {tf}
                   </button>
                 ))}
               </div>
             </div>
 
-            <div className="trade-chart">
-              {chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData}>
-                    <defs>
-                      <linearGradient
-                        id="quantumChartGradient"
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop
-                          offset="0%"
-                          stopColor="#d4af37"
-                          stopOpacity={0.35}
-                        />
-                        <stop
-                          offset="100%"
-                          stopColor="#d4af37"
-                          stopOpacity={0}
-                        />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid stroke="#191919" vertical={false} />
-                    <XAxis
-                      dataKey="time"
-                      axisLine={false}
-                      tickLine={false}
-                      minTickGap={28}
-                      tick={{
-                        fill: "#555",
-                        fontSize: 10,
-                        fontFamily: "Outfit",
-                      }}
-                    />
-                    <YAxis
-                      domain={["dataMin", "dataMax"]}
-                      orientation="right"
-                      axisLine={false}
-                      tickLine={false}
-                      width={78}
-                      tick={{
-                        fill: "#555",
-                        fontSize: 10,
-                        fontFamily: "Outfit",
-                      }}
-                    />
-                    <Tooltip
-                      content={
-                        <CustomTooltip
-                          formatMoney={(value) =>
-                            formatMoney(convertToUsd(value))
-                          }
-                        />
-                      }
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="price"
-                      stroke="#d4af37"
-                      strokeWidth={2}
-                      fill="url(#quantumChartGradient)"
-                      activeDot={{ r: 4, fill: "#f0d471", stroke: "#8b6e18" }}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="chart-loading">Loading live chart…</div>
-              )}
+            <div className="h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData}>
+                  <defs>
+                    <linearGradient id="tradeChartGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#ffffff" stopOpacity={0.22} />
+                      <stop offset="100%" stopColor="#ffffff" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid
+                    stroke="#1f1f23"
+                    strokeDasharray="3 3"
+                    vertical={false}
+                  />
+                  <XAxis
+                    dataKey="label"
+                    stroke="#52525b"
+                    tick={{ fill: "#71717a", fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                    minTickGap={24}
+                  />
+                  <YAxis
+                    domain={["auto", "auto"]}
+                    stroke="#52525b"
+                    tick={{ fill: "#71717a", fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={68}
+                    tickFormatter={(v) => `₹${v.toLocaleString("en-IN")}`}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "#09090b",
+                      border: "1px solid #27272a",
+                      borderRadius: "10px",
+                      fontSize: "12px",
+                      color: "#fff",
+                    }}
+                    formatter={(val) => [formatINR(val), stock.symbol]}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="price"
+                    stroke="#ffffff"
+                    strokeWidth={2}
+                    fill="url(#tradeChartGrad)"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
-          </section>
+          </div>
 
-          <OrderBook
-            coin={coin}
-            price={currentPriceUsd}
-            orderBook={orderBook}
-            currency={currency}
-            formatMoney={formatMoney}
-          />
+          {/* Market Depth */}
+          <div className="rounded-2xl border border-zinc-800/90 bg-[#0b0b0b] p-5">
+            <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-zinc-400">
+              Simulated Market Depth (NSE Level 1)
+            </h3>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <div className="mb-2 flex justify-between text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                  <span>Bid Price</span>
+                  <span>Qty</span>
+                </div>
+                <div className="space-y-1.5">
+                  {orderBook.bids.map((b, i) => (
+                    <div
+                      key={i}
+                      className="font-mono-num flex justify-between rounded-lg bg-emerald-500/5 px-3 py-1.5 text-xs"
+                    >
+                      <span className="text-emerald-400">
+                        {formatINR(b.price)}
+                      </span>
+                      <span className="text-zinc-300">{b.qty}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="mb-2 flex justify-between text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                  <span>Ask Price</span>
+                  <span>Qty</span>
+                </div>
+                <div className="space-y-1.5">
+                  {orderBook.asks.map((a, i) => (
+                    <div
+                      key={i}
+                      className="font-mono-num flex justify-between rounded-lg bg-red-500/5 px-3 py-1.5 text-xs"
+                    >
+                      <span className="text-red-400">{formatINR(a.price)}</span>
+                      <span className="text-zinc-300">{a.qty}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <TradingPanel
-          coin={coin}
-          side={side}
-          setSide={setSide}
-          orderType={orderType}
-          setOrderType={(type) => {
-            setOrderType(type);
-            if (type === "limit" && !limitPrice)
-              setLimitPrice(String(currentPrice));
-          }}
-          amount={amount}
-          setAmount={setAmount}
-          currentPrice={currentPrice}
-          limitPrice={limitPrice}
-          setLimitPrice={setLimitPrice}
-          total={total}
-          message={message}
-          handleSubmit={handleSubmit}
-          choosePercentage={choosePercentage}
-          cash={wallet.cash}
-          heldAmount={holding?.amount || 0}
-          currency={currency}
-          formatMoney={formatMoney}
-        />
-      </section>
-    </main>
-  );
-}
+        {/* Right: Buy & Sell Order Ticket */}
+        <div className="rounded-2xl border border-zinc-800/90 bg-[#0b0b0b] p-5 lg:col-span-4">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-bold text-white">
+              <FiSliders className="h-4 w-4" />
+              Order Ticket
+            </div>
+            <span className="font-mono-num text-[11px] text-zinc-400">
+              Cash: {formatINR(wallet.cash, 0)}
+            </span>
+          </div>
 
-function TradingPanel({
-  coin,
-  side,
-  setSide,
-  orderType,
-  setOrderType,
-  amount,
-  setAmount,
-  currentPrice,
-  limitPrice,
-  setLimitPrice,
-  total,
-  message,
-  handleSubmit,
-  choosePercentage,
-  cash,
-  heldAmount,
-  currency,
-  formatMoney,
-}) {
-  return (
-    <aside className="trading-panel">
-      <div className="buy-sell-tabs">
-        <button
-          className={side === "buy" ? "buy active" : ""}
-          onClick={() => setSide("buy")}
-        >
-          Buy
-        </button>
-        <button
-          className={side === "sell" ? "sell active" : ""}
-          onClick={() => setSide("sell")}
-        >
-          Sell
-        </button>
+          {/* Buy / Sell Buttons */}
+          <div className="grid grid-cols-2 gap-2 rounded-xl border border-zinc-800 bg-[#060606] p-1">
+            <button
+              type="button"
+              onClick={() => setSide("BUY")}
+              className={`rounded-lg py-2.5 text-xs font-bold tracking-wider transition-all ${
+                side === "BUY"
+                  ? "bg-white text-black shadow"
+                  : "text-zinc-400 hover:text-white"
+              }`}
+            >
+              BUY
+            </button>
+            <button
+              type="button"
+              onClick={() => setSide("SELL")}
+              className={`rounded-lg py-2.5 text-xs font-bold tracking-wider transition-all ${
+                side === "SELL"
+                  ? "bg-zinc-200 text-black shadow"
+                  : "text-zinc-400 hover:text-white"
+              }`}
+            >
+              SELL
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmitOrder} className="mt-5 space-y-4">
+            {/* Order Type & Product Type */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1.5 block text-[11px] text-zinc-400">
+                  Order Type
+                </label>
+                <div className="grid grid-cols-2 rounded-lg border border-zinc-800 bg-[#060606] p-0.5 text-[11px]">
+                  {["MARKET", "LIMIT"].map((type) => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => {
+                        setOrderType(type);
+                        if (type === "LIMIT") {
+                          setLimitPrice(livePrice.toFixed(2));
+                        }
+                      }}
+                      className={`rounded-md py-1.5 font-medium ${
+                        orderType === type
+                          ? "bg-zinc-800 text-white"
+                          : "text-zinc-500"
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-[11px] text-zinc-400">
+                  Product
+                </label>
+                <div className="grid grid-cols-2 rounded-lg border border-zinc-800 bg-[#060606] p-0.5 text-[11px]">
+                  {[
+                    { id: "CNC", label: "Delivery" },
+                    { id: "MIS", label: "Intraday" },
+                  ].map((prod) => (
+                    <button
+                      key={prod.id}
+                      type="button"
+                      onClick={() => setProductType(prod.id)}
+                      className={`rounded-md py-1.5 font-medium ${
+                        productType === prod.id
+                          ? "bg-zinc-800 text-white"
+                          : "text-zinc-500"
+                      }`}
+                    >
+                      {prod.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Quantity Input */}
+            <div>
+              <div className="mb-1.5 flex justify-between text-[11px]">
+                <label htmlFor="order-qty" className="text-zinc-400">
+                  Quantity (Shares)
+                </label>
+                <span className="text-zinc-500">
+                  Held: {holding?.quantity || 0}
+                </span>
+              </div>
+              <input
+                id="order-qty"
+                type="number"
+                min="1"
+                step="1"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                className="font-mono-num w-full rounded-xl border border-zinc-800 bg-[#060606] px-3.5 py-2.5 text-sm text-white outline-none focus:border-white"
+              />
+              <div className="mt-2 flex gap-1.5">
+                {[1, 5, 10, 25, 50].map((q) => (
+                  <button
+                    key={q}
+                    type="button"
+                    onClick={() => setQuantity(String(q))}
+                    className="flex-1 rounded-md border border-zinc-800 bg-zinc-950 py-1 text-[11px] text-zinc-400 hover:border-zinc-600 hover:text-white"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Stock Price Input */}
+            <div>
+              <div className="mb-1.5 flex justify-between text-[11px]">
+                <label htmlFor="order-price" className="text-zinc-400">
+                  Stock Price (₹)
+                </label>
+                <span className="text-zinc-500">
+                  {orderType === "MARKET" ? "Live NSE LTP" : "Limit Price"}
+                </span>
+              </div>
+              <input
+                id="order-price"
+                type="number"
+                step="0.05"
+                min="0.05"
+                disabled={orderType === "MARKET"}
+                value={
+                  orderType === "MARKET" ? livePrice.toFixed(2) : limitPrice
+                }
+                onChange={(e) => setLimitPrice(e.target.value)}
+                className="font-mono-num w-full rounded-xl border border-zinc-800 bg-[#060606] px-3.5 py-2.5 text-sm text-white outline-none focus:border-white disabled:cursor-not-allowed disabled:opacity-70"
+              />
+            </div>
+
+            {/* Order Summary */}
+            <div className="space-y-2 rounded-xl border border-zinc-800/90 bg-[#070707] p-4 text-xs">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                Order Summary
+              </div>
+              <div className="flex justify-between text-zinc-400">
+                <span>
+                  {qtyNum} × {formatINR(effectivePrice)}
+                </span>
+                <span className="font-mono-num text-white">
+                  {formatINR(grossValue)}
+                </span>
+              </div>
+              <div className="flex justify-between text-zinc-400">
+                <span>Brokerage (Paper)</span>
+                <span className="font-mono-num text-emerald-400">₹0.00</span>
+              </div>
+              <div className="flex justify-between text-zinc-400">
+                <span>STT &amp; Exchange Txn (0.11%)</span>
+                <span className="font-mono-num text-zinc-300">
+                  {formatINR(statutoryCharges)}
+                </span>
+              </div>
+              <div className="flex justify-between border-t border-zinc-800 pt-2 font-semibold text-white">
+                <span>{side === "BUY" ? "Total Payable" : "Est. Proceeds"}</span>
+                <span className="font-mono-num">{formatINR(netTotal)}</span>
+              </div>
+            </div>
+
+            {feedback && (
+              <div
+                className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs ${
+                  feedback.ok
+                    ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                    : "border-red-500/40 bg-red-500/10 text-red-300"
+                }`}
+              >
+                <FiCheckCircle className="h-4 w-4 shrink-0" />
+                <span>{feedback.message}</span>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              className="w-full rounded-xl bg-white py-3 text-xs font-bold uppercase tracking-wider text-black transition-all hover:bg-zinc-200"
+            >
+              Place {side} Order ({stock.symbol})
+            </button>
+          </form>
+        </div>
       </div>
-      <div className="trading-panel-content">
-        <div className="paper-trading-label">PAPER TRADING · NO REAL FUNDS</div>
-        <div className="trading-balance">
-          <span>
-            {side === "buy" ? "Available Balance" : `${coin.symbol} Available`}
+
+      {/* Recent Transaction History */}
+      <div className="overflow-hidden rounded-2xl border border-zinc-800/90 bg-[#0b0b0b]">
+        <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-4">
+          <div className="flex items-center gap-2 text-sm font-bold text-white">
+            <FiClock className="h-4 w-4" />
+            Recent Transaction History
+          </div>
+          <span className="text-[11px] text-zinc-500">
+            Showing latest {Math.min(6, wallet.transactions.length)} simulated orders
           </span>
-          <strong>
-            {side === "buy"
-              ? `${formatMoney(cash)} ${currency}`
-              : `${formatNumber(heldAmount)} ${coin.symbol}`}
-          </strong>
         </div>
-        <div className="order-type-selector">
-          <span>Order Type</span>
-          <div>
-            <button
-              className={orderType === "market" ? "active" : ""}
-              onClick={() => setOrderType("market")}
-            >
-              Market
-            </button>
-            <button
-              className={orderType === "limit" ? "active" : ""}
-              onClick={() => setOrderType("limit")}
-            >
-              Limit
-            </button>
-          </div>
-        </div>
-        <div className="trade-form-group">
-          <label>Price</label>
-          <div className="trade-input">
-            <input
-              type="number"
-              value={orderType === "market" ? currentPrice : limitPrice}
-              onChange={(event) => setLimitPrice(event.target.value)}
-              disabled={orderType === "market"}
-            />
-            <span>{currency}</span>
-          </div>
-        </div>
-        <div className="trade-form-group">
-          <label>Amount</label>
-          <div className="trade-input">
-            <input
-              type="number"
-              min="0"
-              step="any"
-              placeholder="0.00"
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
-            />
-            <span>{coin.symbol}</span>
-          </div>
-        </div>
-        <div className="trade-percentage-buttons">
-          {[25, 50, 75, 100].map((percentage) => (
-            <button
-              key={percentage}
-              onClick={() => choosePercentage(percentage)}
-            >
-              {percentage}%
-            </button>
-          ))}
-        </div>
-        <div className="trade-total">
-          <span>Total</span>
-          <strong>
-            {formatMoney(total)} {currency}
-          </strong>
-        </div>
-        <button
-          className={
-            side === "buy"
-              ? "trade-submit-button buy"
-              : "trade-submit-button sell"
-          }
-          onClick={handleSubmit}
-        >
-          {side === "buy" ? `Buy ${coin.symbol}` : `Sell ${coin.symbol}`}
-        </button>
-        {message && (
-          <div
-            className={
-              message.ok ? "trade-feedback success" : "trade-feedback error"
-            }
-          >
-            {message.message}
-          </div>
-        )}
-        <div className="trade-fee">
-          <span>Paper fee</span>
-          <strong>0.10%</strong>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[680px] text-left text-xs">
+            <thead>
+              <tr className="border-b border-zinc-800 bg-[#080808] text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                <th className="px-4 py-3">Order ID</th>
+                <th className="px-4 py-3">Stock</th>
+                <th className="px-4 py-3">Side</th>
+                <th className="px-4 py-3 text-right">Qty</th>
+                <th className="px-4 py-3 text-right">Exec. Price</th>
+                <th className="px-4 py-3 text-right">Total (₹)</th>
+                <th className="px-4 py-3 text-right">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-800/70">
+              {wallet.transactions.slice(0, 6).map((tx) => (
+                <tr key={tx.id} className="hover:bg-zinc-900/40">
+                  <td className="font-mono-num px-4 py-3 text-zinc-400">
+                    {tx.id}
+                  </td>
+                  <td className="px-4 py-3 font-semibold text-white">
+                    {tx.symbol}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`rounded px-2 py-0.5 text-[10px] font-bold ${
+                        tx.side === "BUY"
+                          ? "bg-white text-black"
+                          : tx.side === "SELL"
+                            ? "border border-zinc-700 bg-zinc-900 text-zinc-200"
+                            : "border border-zinc-700 text-zinc-300"
+                      }`}
+                    >
+                      {tx.side}
+                    </span>
+                  </td>
+                  <td className="font-mono-num px-4 py-3 text-right text-zinc-300">
+                    {tx.quantity}
+                  </td>
+                  <td className="font-mono-num px-4 py-3 text-right text-zinc-300">
+                    {formatINR(tx.price)}
+                  </td>
+                  <td className="font-mono-num px-4 py-3 text-right font-semibold text-white">
+                    {formatINR(tx.total)}
+                  </td>
+                  <td className="px-4 py-3 text-right text-emerald-400">
+                    {tx.status}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
-    </aside>
-  );
-}
-
-function OrderBook({ coin, price, orderBook, currency, formatMoney }) {
-  return (
-    <section className="order-book-card">
-      <div className="order-book-header">
-        <div>
-          <span className="section-kicker">LIVE MARKET DEPTH</span>
-          <h2>Order Book</h2>
-          <p>
-            Live buy and sell orders for {coin.name}, converted to {currency}.
-          </p>
-        </div>
-        <strong>
-          {coin.symbol} MARKET · {currency}
-        </strong>
-      </div>
-      <div className="order-book-columns">
-        <span>
-          Price per {coin.symbol} ({currency})
-        </span>
-        <span>{coin.symbol} Quantity</span>
-        <span>Order Value ({currency})</span>
-      </div>
-      <div className="order-list sell-orders">
-        {orderBook.asks.map((order, index) => (
-          <OrderRow
-            key={`${order.price}-${index}`}
-            order={order}
-            type="sell"
-            formatMoney={formatMoney}
-          />
-        ))}
-      </div>
-      <div className="current-market-price">
-        <span>Current {coin.symbol} market price</span>
-        <strong>
-          <FiArrowUpRight /> {formatMoney(price)}
-        </strong>
-      </div>
-      <div className="order-list buy-orders">
-        {orderBook.bids.map((order, index) => (
-          <OrderRow
-            key={`${order.price}-${index}`}
-            order={order}
-            type="buy"
-            formatMoney={formatMoney}
-          />
-        ))}
-      </div>
-      {!orderBook.asks.length && !orderBook.bids.length && (
-        <div className="order-book-loading">Loading live order book…</div>
-      )}
-    </section>
-  );
-}
-
-function OrderRow({ order, type, formatMoney }) {
-  return (
-    <div className="order-row">
-      <span className={type === "buy" ? "positive" : "negative"}>
-        {formatMoney(order.price)}
-      </span>
-      <span>{formatNumber(order.amount, 6)}</span>
-      <span>{formatMoney(order.price * order.amount)}</span>
-    </div>
-  );
-}
-
-function CustomTooltip({ active, payload, label, formatMoney }) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="chart-tooltip">
-      <span>{label}</span>
-      <strong>{formatMoney(payload[0].value)}</strong>
     </div>
   );
 }

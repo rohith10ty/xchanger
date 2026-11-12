@@ -1,273 +1,136 @@
-# ⬢ Quantum Exchange
+# Quantum Exchange
 
-A modern and responsive **Cryptocurrency Exchange Dashboard UI** built using **React, Vite, Tailwind CSS, JavaScript, React Icons, Recharts, and Lenis**.
+Quantum Exchange is a responsive cryptocurrency dashboard and paper-trading interface built with React and Vite. It combines a dark exchange-style UI with live public market information, interactive charts, portfolio tracking, transaction history, authentication-style profile screens, and USD/INR display support.
 
-Quantum is a frontend-only cryptocurrency exchange interface designed with a premium dark theme, glowing gold accents, responsive layouts, and interactive trading features.
+> **Educational project:** Orders are simulated in the browser. No real money, wallet, backend, or cryptocurrency order is used.
 
-> This project uses mock/static cryptocurrency data only. No real cryptocurrency API or backend is connected.
+## Live links
 
----
+- GitHub: [github.com/rohith10ty/quantum-exchange](https://github.com/rohith10ty/quantum-exchange)
+- Live deployment: Add the Netlify deployment URL here after publishing
 
-## ✨ Features
+## Assignment coverage
 
-### Home
+| Requirement | Implementation |
+| --- | --- |
+| Header/dashboard | Quantum logo, navigation, crypto search, notifications, profile and responsive mobile menu |
+| Market overview | Coin name, symbol, live price, 24-hour change, estimated market cap, 24-hour volume and gain/loss indicators |
+| Trading | Pair selector, current price, Buy/Sell tabs, Market/Limit types, amount, price, total, percentage controls and order feedback |
+| Price chart | Responsive historical chart with 1H, 1D, 1W and 1M periods, current price and movement |
+| Order book | Live buy/sell rows with price, amount, total and current market-price marker |
+| Transactions | Searchable/filterable history with ID, cryptocurrency, side, amount, price, status, date/time and profit/loss |
+| Portfolio | Total balance, available cash, profit/loss, allocation chart, growth chart and live-valued holdings |
+| React requirements | Reusable components, props, `useState`, `useEffect`, context, conditional rendering, `.map()` and event handling |
+| Responsive UI | Layouts for mobile 320px+, tablet 768px+, laptop 1024px+ and desktop 1440px+ |
 
-- Premium cryptocurrency exchange landing page
-- Market ticker
-- Featured cryptocurrency cards
-- Market statistics
-- Platform feature cards
-- Responsive hero section
+## Features
 
-### Market Overview
+- Ten supported markets: BTC, ETH, SOL, BNB, XRP, DOGE, ADA, AVAX, LINK and TON
+- Search and filter by cryptocurrency name or symbol
+- Live Binance public price, 24-hour ticker, candle and order-book data
+- Home-page leader charts with 1 Day, 1 Month, 1 Year and Overall choices; 1 Month is the default
+- USD and INR switching across markets, trading, transactions and portfolio
+- Indian lakh/crore formatting for larger INR values
+- Persistent paper wallet, holdings and transaction history using `localStorage`
+- Buy and sell validation, trading fee calculation and success/error messages
+- Realized and unrealized profit/loss calculations
+- Notification panel, responsive navigation and sign-in/sign-up profile interactions
+- Dedicated JSX and CSS files for each visual component
+- Animated Quantum logo and matching SVG favicon
 
-- Cryptocurrency market table
-- 10 popular cryptocurrencies
-- Search by cryptocurrency name or symbol
-- Current price
-- 24-hour percentage change
-- Market capitalization
-- Trading volume
-- Positive and negative price indicators
-- Interactive selected market state
+## Data sources and fallbacks
 
-### Supported Cryptocurrencies
+Market prices and charts use Binance's public market-data endpoints. The USD/INR reference rate uses Frankfurter, with a safe local fallback if that service is unavailable. Estimated market cap is calculated from the live price and a static approximate circulating-supply value, so it should be treated as a UI estimate rather than financial data.
 
-- Bitcoin (BTC)
-- Ethereum (ETH)
-- Solana (SOL)
-- Binance Coin (BNB)
-- XRP
-- Dogecoin (DOGE)
-- Cardano (ADA)
-- Avalanche (AVAX)
-- Chainlink (LINK)
-- Toncoin (TON)
+If a market request is temporarily unavailable, the interface continues rendering with fallback values. Trading remains simulated even while live prices are displayed.
 
-### Trading Interface
+## Technologies
 
-- BTC / USDT trading pair
-- Current market price
-- Interactive Buy / Sell tabs
-- Market / Limit order selector
-- Price input
-- Amount input
-- Automatic total calculation
-- 25%, 50%, 75%, and 100% balance selectors
-- Buy / Sell UI feedback
-- Estimated trading fee
-
-### Price Chart
-
-- Responsive cryptocurrency price chart
-- Static/mock trading data
-- 1H timeframe
-- 1D timeframe
-- 1W timeframe
-- 1M timeframe
-- Interactive chart tooltip
-- Current price and movement indicator
-
-### Order Book
-
-- Buy orders
-- Sell orders
-- Price
-- Amount
-- Total
-- Current market price indicator
-
-### Portfolio
-
-- Total portfolio balance
-- Available trading balance
-- Profit / Loss
-- Asset allocation
-- Portfolio growth visualization
-- Cryptocurrency holdings
-- Hide / Show balance
-- Sample portfolio update interaction
-- Asset allocation progress indicators
-
-### Transactions
-
-- Transaction ID
-- Cryptocurrency
-- Buy / Sell type
-- Amount
-- Price
-- Transaction status
-- Date and time
-- Search functionality
-- Buy / Sell transaction filters
-- Completed, Pending, and Failed status indicators
-
-### Additional Features
-
-- Responsive mobile navigation
-- Cryptocurrency search from navbar
-- Hash-based page navigation
-- Smooth scrolling using Lenis
-- Hover and active states
-- Responsive tables
-- Mobile, tablet, laptop, and desktop layouts
-- Outfit font throughout the application
-- Dark black and charcoal UI theme
-- Gold Quantum branding
-
----
-
-## 🛠 Technologies Used
-
-- React.js
-- Vite
-- JavaScript ES6+
-- Tailwind CSS
-- CSS
+- React 19
+- Vite 8
+- Tailwind CSS 4
+- JavaScript (ES6+)
 - React Icons
 - Recharts
 - Lenis
-- Git
-- GitHub
-- Netlify
+- Component-scoped CSS
+- Git and GitHub
 
----
+Tailwind is configured through the official Vite plugin and is used alongside dedicated component CSS. This keeps each component's detailed styling easy to find while retaining Tailwind utility support for shared layout primitives.
 
-## 📱 Responsive Design
-
-Quantum Exchange is designed to support:
-
-- Mobile — 320px+
-- Tablet — 768px+
-- Laptop — 1024px+
-- Desktop — 1440px+
-
----
-
-## 🚀 Installation
-
-Clone the repository:
+## Installation
 
 ```bash
-git clone YOUR_GITHUB_REPOSITORY_URL
-```
-
-Navigate into the project:
-
-```bash
+git clone https://github.com/rohith10ty/quantum-exchange.git
 cd quantum-exchange
-```
-
-Install dependencies:
-
-```bash
 npm install
-```
-
-Start the development server:
-
-```bash
 npm run dev
 ```
 
-The application will run locally using the Vite development server.
+Open the local URL shown by Vite, normally `http://localhost:5173`.
 
----
-
-## 📦 Production Build
-
-To create a production build:
+## Available scripts
 
 ```bash
-npm run build
+npm run dev      # Start the development server
+npm run lint     # Run ESLint
+npm run build    # Create a production build in dist/
+npm run preview  # Preview the production build
 ```
 
-To preview the production build locally:
-
-```bash
-npm run preview
-```
-
----
-
-## 📂 Project Structure
+## Project structure
 
 ```text
 quantum-exchange/
-│
-├── src/
-│   ├── components/
-│   │   ├── DashboardHeader.jsx
-│   │   ├── Footer.jsx
-│   │   └── Navbar.jsx
-│   │
-│   ├── pages/
-│   │   ├── Home.jsx
-│   │   ├── Markets.jsx
-│   │   ├── Portfolio.jsx
-│   │   ├── Trade.jsx
-│   │   └── Transactions.jsx
-│   │
-│   ├── App.jsx
-│   ├── index.css
-│   └── main.jsx
-│
-├── public/
-├── index.html
-├── package.json
-├── vite.config.js
-└── README.md
+|-- public/
+|   `-- quantum-favicon.svg
+|-- src/
+|   |-- components/
+|   |   |-- ExchangeProvider.jsx
+|   |   |-- exchangeStore.js
+|   |   |-- Navbar.jsx / Navbar.css
+|   |   |-- Home.jsx / Home.css
+|   |   |-- Markets.jsx / Markets.css
+|   |   |-- Trade.jsx / Trade.css
+|   |   |-- Portfolio.jsx / Portfolio.css
+|   |   |-- Transactions.jsx / Transactions.css
+|   |   |-- Profile.jsx / Profile.css
+|   |   `-- Footer.jsx / Footer.css
+|   |-- App.jsx / App.css
+|   |-- global.css
+|   `-- main.jsx
+|-- index.html
+|-- netlify.toml
+|-- package.json
+`-- vite.config.js
 ```
 
----
+## Screenshots
 
-## 📸 Screenshots
+### Desktop
 
-Screenshots of the following sections can be added here:
+![Quantum Exchange home screen](docs/screenshots/home-desktop.png)
 
-- Home Page
-- Market Overview
-- Trading Interface
-- Portfolio
-- Transactions
-- Mobile Responsive View
+![Quantum Exchange markets screen](docs/screenshots/markets-desktop.png)
 
----
+### Mobile
 
-## 🌐 Deployment
+![Quantum Exchange mobile home screen](docs/screenshots/home-mobile.png)
 
-The application can be deployed using **Netlify**.
+## Deployment
 
-**Live Demo:** Coming soon
+The included `netlify.toml` sets the production build command to `npm run build` and publishes `dist`.
 
-**GitHub Repository:** Coming soon
+1. Push the latest changes to GitHub.
+2. In Netlify, select **Add new site > Import an existing project**.
+3. Choose the GitHub repository.
+4. Confirm build command `npm run build` and publish directory `dist`.
+5. Deploy, then replace the live-deployment placeholder near the top of this README.
 
----
+## Disclaimer
 
-## 🎨 Design
+Quantum Exchange is an educational frontend project. Live market information may be delayed or unavailable and must not be used as financial advice. All balances, trades, holdings and transactions are simulated locally in the browser.
 
-Quantum uses a custom dark cryptocurrency exchange design with:
+## Author
 
-- Black backgrounds
-- Dark grey dashboard cards
-- Metallic gold accent elements
-- Green profit indicators
-- Red loss indicators
-- Outfit typography
-- Smooth transitions and hover states
-
----
-
-## 👨‍💻 Developer
-
-**Rohith Naidu**
-
-MERN Stack Developer
-
----
-
-## ⚠️ Disclaimer
-
-Quantum Exchange is a frontend demonstration project created for educational purposes.
-
-All cryptocurrency prices, balances, transactions, trading information, market values, and other financial data shown in this application are mock/static data and do not represent real-time market information.
+Rohith Naidu — MERN Stack Developer

@@ -1,255 +1,149 @@
 import { useMemo, useState } from "react";
-import {
-  FiArrowDownRight,
-  FiArrowUpRight,
-  FiFilter,
-  FiSearch,
-} from "react-icons/fi";
-import { formatNumber, useExchange } from "./exchangeStore";
-import "./Transactions.css";
+import { FiSearch } from "react-icons/fi";
+import { formatINR, useExchange } from "./exchangeStore";
 
 function Transactions() {
-  const { wallet, tickers, totalPnl, formatMoney } = useExchange();
+  const { wallet } = useExchange();
+  const [filter, setFilter] = useState("ALL");
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState("All");
 
-  const transactions = wallet.transactions;
-  const filteredTransactions = useMemo(
-    () =>
-      transactions.filter((transaction) => {
-        const query = search.toLowerCase();
-        const matchesSearch =
-          transaction.id.toLowerCase().includes(query) ||
-          transaction.crypto.toLowerCase().includes(query) ||
-          transaction.symbol.toLowerCase().includes(query);
-        return (
-          matchesSearch && (filter === "All" || transaction.type === filter)
-        );
-      }),
-    [filter, search, transactions],
-  );
-
-  const totalBought = transactions
-    .filter((item) => item.type === "Buy")
-    .reduce((sum, item) => sum + item.total, 0);
-  const totalSold = transactions
-    .filter((item) => item.type === "Sell")
-    .reduce((sum, item) => sum + item.total, 0);
-  const currentMonth = new Date().getMonth();
-  const currentYear = new Date().getFullYear();
-  const thisMonth = transactions.filter((item) => {
-    const date = new Date(item.timestamp);
-    return (
-      date.getMonth() === currentMonth && date.getFullYear() === currentYear
-    );
-  }).length;
-
-  const getTransactionPnl = (transaction) => {
-    if (transaction.type === "Sell") return transaction.realizedPnl || 0;
-    const livePrice = tickers[transaction.symbol]?.price || transaction.price;
-    return (
-      (livePrice - transaction.price) * transaction.amount - transaction.fee
-    );
-  };
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return wallet.transactions.filter((tx) => {
+      if (filter !== "ALL" && tx.side !== filter) return false;
+      if (
+        q &&
+        !tx.symbol.toLowerCase().includes(q) &&
+        !tx.name.toLowerCase().includes(q) &&
+        !tx.id.toLowerCase().includes(q)
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [filter, search, wallet.transactions]);
 
   return (
-    <main className="transactions-page">
-      <section className="transactions-header">
-        <div>
-          <div className="dashboard-eyebrow">
-            <span></span>ACCOUNT ACTIVITY
-          </div>
-          <h1>Transactions</h1>
-          <p>
-            Review your paper trades, execution prices and live profit or loss.
-          </p>
-        </div>
-        <div className="transactions-summary">
-          <div>
-            <span>Total Transactions</span>
-            <strong>{transactions.length}</strong>
-          </div>
-          <div>
-            <span>This Month</span>
-            <strong>{thisMonth}</strong>
-          </div>
-        </div>
-      </section>
+    <div className="space-y-6">
+      <div>
+        <span className="text-[11px] font-semibold uppercase tracking-widest text-zinc-500">
+          Order Book &amp; Audit Ledger
+        </span>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+          Transaction History
+        </h1>
+      </div>
 
-      <section className="transaction-stats-grid">
-        <article className="transaction-stat-card">
-          <span>Total Bought</span>
-          <strong>{formatMoney(totalBought)}</strong>
-          <small>
-            {transactions.filter((item) => item.type === "Buy").length}{" "}
-            completed buys
-          </small>
-        </article>
-        <article className="transaction-stat-card">
-          <span>Total Sold</span>
-          <strong>{formatMoney(totalSold)}</strong>
-          <small>
-            {transactions.filter((item) => item.type === "Sell").length}{" "}
-            completed sells
-          </small>
-        </article>
-        <article className="transaction-stat-card">
-          <span>Net Profit / Loss</span>
-          <strong className={totalPnl >= 0 ? "positive" : "negative"}>
-            {totalPnl >= 0 ? "+" : ""}
-            {formatMoney(totalPnl)}
-          </strong>
-          <small>Realized and unrealized</small>
-        </article>
-        <article className="transaction-stat-card">
-          <span>Completed Orders</span>
-          <strong>{transactions.length}</strong>
-          <small className="positive">100% paper execution</small>
-        </article>
-      </section>
-
-      <section className="transactions-table-card">
-        <div className="transactions-toolbar">
-          <div>
-            <span className="section-kicker">HISTORY</span>
-            <h2>Recent Transactions</h2>
-          </div>
-          <div className="transactions-tools">
-            <div className="transactions-search">
-              <FiSearch />
-              <input
-                type="text"
-                placeholder="Search transaction..."
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
-            </div>
-            <div className="transaction-filter">
-              <FiFilter />
-              {["All", "Buy", "Sell"].map((item) => (
-                <button
-                  key={item}
-                  className={filter === item ? "active" : ""}
-                  onClick={() => setFilter(item)}
-                >
-                  {item}
-                </button>
-              ))}
-            </div>
-          </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex gap-1.5 rounded-xl border border-zinc-800 bg-[#0a0a0a] p-1">
+          {["ALL", "BUY", "SELL", "IPO"].map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setFilter(tab)}
+              className={`rounded-lg px-3.5 py-1.5 text-xs font-medium transition-colors ${
+                filter === tab
+                  ? "bg-white text-black"
+                  : "text-zinc-400 hover:text-white"
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
         </div>
 
-        <div className="transactions-table-wrapper">
-          <table className="transactions-table">
+        <div className="flex items-center rounded-xl border border-zinc-800 bg-[#0a0a0a] px-3 py-2">
+          <FiSearch className="mr-2 h-3.5 w-3.5 text-zinc-500" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by Order ID or Stock..."
+            className="w-56 bg-transparent text-xs text-white placeholder-zinc-500 outline-none"
+          />
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-zinc-800/90 bg-[#0b0b0b]">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[780px] text-left text-xs">
             <thead>
-              <tr>
-                <th>Transaction ID</th>
-                <th>Cryptocurrency</th>
-                <th>Type</th>
-                <th>Amount</th>
-                <th>Price</th>
-                <th>Profit / Loss</th>
-                <th>Status</th>
-                <th>Date / Time</th>
+              <tr className="border-b border-zinc-800 bg-[#080808] text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                <th className="px-4 py-3.5">Order ID</th>
+                <th className="px-4 py-3.5">Date &amp; Time</th>
+                <th className="px-4 py-3.5">Stock / IPO</th>
+                <th className="px-4 py-3.5">Side</th>
+                <th className="px-4 py-3.5">Type</th>
+                <th className="px-4 py-3.5 text-right">Qty</th>
+                <th className="px-4 py-3.5 text-right">Price</th>
+                <th className="px-4 py-3.5 text-right">Charges</th>
+                <th className="px-4 py-3.5 text-right">Net Total</th>
+                <th className="px-4 py-3.5 text-right">Status</th>
               </tr>
             </thead>
-            <tbody>
-              {filteredTransactions.map((transaction) => {
-                const pnl = getTransactionPnl(transaction);
-                const date = new Date(transaction.timestamp);
-                return (
-                  <tr key={transaction.id}>
-                    <td data-label="Transaction ID" className="transaction-id">
-                      {transaction.id}
+            <tbody className="divide-y divide-zinc-800/70">
+              {filtered.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={10}
+                    className="px-4 py-12 text-center text-zinc-500"
+                  >
+                    No transactions found.
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((tx) => (
+                  <tr key={tx.id} className="hover:bg-zinc-900/40">
+                    <td className="font-mono-num px-4 py-3.5 text-zinc-400">
+                      {tx.id}
                     </td>
-                    <td data-label="Cryptocurrency">
-                      <div className="transaction-asset">
-                        <div className="market-coin-icon">
-                          {transaction.icon}
-                        </div>
-                        <div>
-                          <strong>{transaction.crypto}</strong>
-                          <span>{transaction.symbol}</span>
-                        </div>
-                      </div>
+                    <td className="px-4 py-3.5 text-zinc-400">
+                      {new Date(tx.createdAt).toLocaleString("en-IN", {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      })}
                     </td>
-                    <td data-label="Order Type">
-                      <div
-                        className={
-                          transaction.type === "Buy"
-                            ? "transaction-type buy"
-                            : "transaction-type sell"
-                        }
+                    <td className="px-4 py-3.5">
+                      <div className="font-bold text-white">{tx.symbol}</div>
+                      <div className="text-[11px] text-zinc-500">{tx.name}</div>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <span
+                        className={`rounded px-2 py-0.5 text-[10px] font-bold ${
+                          tx.side === "BUY"
+                            ? "bg-white text-black"
+                            : "border border-zinc-700 bg-zinc-900 text-zinc-200"
+                        }`}
                       >
-                        {transaction.type === "Buy" ? (
-                          <FiArrowDownRight />
-                        ) : (
-                          <FiArrowUpRight />
-                        )}
-                        {transaction.type}
-                      </div>
-                    </td>
-                    <td data-label="Coin Amount">
-                      {formatNumber(transaction.amount)} {transaction.symbol}
-                    </td>
-                    <td
-                      data-label="Execution Price"
-                      className="transaction-price"
-                    >
-                      {formatMoney(transaction.price)}
-                    </td>
-                    <td
-                      data-label="Profit / Loss"
-                      className={
-                        pnl >= 0
-                          ? "transaction-pnl positive"
-                          : "transaction-pnl negative"
-                      }
-                    >
-                      {pnl >= 0 ? "+" : ""}
-                      {formatMoney(pnl)}
-                    </td>
-                    <td data-label="Status">
-                      <span className="transaction-status completed">
-                        <span></span>
-                        {transaction.status}
+                        {tx.side}
                       </span>
                     </td>
-                    <td data-label="Date / Time">
-                      <div className="transaction-date">
-                        <strong>{date.toLocaleDateString()}</strong>
-                        <span>
-                          {date.toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </span>
-                      </div>
+                    <td className="px-4 py-3.5 text-zinc-400">
+                      {tx.orderType} • {tx.productType}
+                    </td>
+                    <td className="font-mono-num px-4 py-3.5 text-right text-zinc-300">
+                      {tx.quantity}
+                    </td>
+                    <td className="font-mono-num px-4 py-3.5 text-right text-zinc-300">
+                      {formatINR(tx.price)}
+                    </td>
+                    <td className="font-mono-num px-4 py-3.5 text-right text-zinc-400">
+                      {formatINR(tx.charges)}
+                    </td>
+                    <td className="font-mono-num px-4 py-3.5 text-right font-semibold text-white">
+                      {formatINR(tx.total)}
+                    </td>
+                    <td className="px-4 py-3.5 text-right text-emerald-400">
+                      {tx.status}
                     </td>
                   </tr>
-                );
-              })}
+                ))
+              )}
             </tbody>
           </table>
         </div>
-
-        {filteredTransactions.length === 0 && (
-          <div className="transactions-empty">
-            <span className="gold-symbol">Q</span>
-            <h3>
-              {transactions.length
-                ? "No transactions found"
-                : "No paper trades yet"}
-            </h3>
-            <p>
-              {transactions.length
-                ? "Try changing your search or transaction filter."
-                : "Buy or sell a coin from the Trade page and it will appear here."}
-            </p>
-          </div>
-        )}
-      </section>
-    </main>
+      </div>
+    </div>
   );
 }
 
